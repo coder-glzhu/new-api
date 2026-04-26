@@ -89,19 +89,38 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
+    proxy: (() => {
+      const apiTarget =
+        process.env.VITE_DEV_API_TARGET || 'http://localhost:3000';
+      const isHttps = apiTarget.startsWith('https://');
+      const upstreamHost = new URL(apiTarget).host;
+      const common = {
+        target: apiTarget,
         changeOrigin: true,
-      },
-      '/mj': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-      '/pg': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-    },
+        secure: isHttps,
+        ws: true,
+        cookieDomainRewrite: { '*': '' },
+        headers: { Origin: apiTarget, Referer: apiTarget + '/' },
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const sc = proxyRes.headers['set-cookie'];
+            if (Array.isArray(sc)) {
+              proxyRes.headers['set-cookie'] = sc.map((c) =>
+                c
+                  .replace(/;\s*Domain=[^;]+/i, '')
+                  .replace(/;\s*Secure/i, '')
+                  .replace(/;\s*SameSite=None/i, '; SameSite=Lax'),
+              );
+            }
+          });
+        },
+      };
+      return {
+        '/api': common,
+        '/mj': common,
+        '/pg': common,
+        '/v1': common,
+      };
+    })(),
   },
 });

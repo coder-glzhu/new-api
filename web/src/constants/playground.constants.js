@@ -76,9 +76,75 @@ export const DEBUG_TABS = {
 // ========== API 相关常量 ==========
 export const API_ENDPOINTS = {
   CHAT_COMPLETIONS: '/pg/chat/completions',
+  IMAGE_GENERATIONS: '/pg/images/generations',
+  IMAGE_EDITS: '/pg/images/edits',
   USER_MODELS: '/api/user/models',
   USER_GROUPS: '/api/user/self/groups',
 };
+
+// ========== 操练场模式 ==========
+export const PLAYGROUND_MODES = {
+  CHAT: 'chat',
+  IMAGE_GENERATION: 'image_generation',
+  IMAGE_EDIT: 'image_edit',
+};
+
+// ========== 图片生成默认参数 ==========
+export const DEFAULT_IMAGE_INPUTS = {
+  model: 'gpt-image-2',
+  group: '',
+  prompt: '',
+  size: '1024x1024',
+  quality: 'auto',
+  n: 1,
+  response_format: 'auto',
+  stream: false,
+};
+
+// 图片尺寸候选项
+export const IMAGE_SIZE_OPTIONS = [
+  { label: 'Auto', value: 'auto' },
+  { label: '1024 × 1024', value: '1024x1024' },
+  { label: '1536 × 1024 (横图)', value: '1536x1024' },
+  { label: '1024 × 1536 (竖图)', value: '1024x1536' },
+];
+
+// 图片质量候选项 (gpt-image-1 / gpt-image-2: auto/low/medium/high；dall-e-3: standard/hd)
+export const IMAGE_QUALITY_OPTIONS = [
+  { label: 'auto', value: 'auto' },
+  { label: 'low', value: 'low' },
+  { label: 'medium', value: 'medium' },
+  { label: 'high', value: 'high' },
+  { label: 'standard', value: 'standard' },
+  { label: 'hd', value: 'hd' },
+];
+
+// 输出格式候选项 - auto 时不向上游传 response_format，由模型默认决定
+export const IMAGE_RESPONSE_FORMAT_OPTIONS = [
+  { label: 'auto', value: 'auto' },
+  { label: 'url', value: 'url' },
+  { label: 'b64_json', value: 'b64_json' },
+];
+
+// 顶部模型快捷选择白名单关键词，用于从用户可用模型里筛选出图像类模型
+export const IMAGE_MODEL_KEYWORDS = [
+  'gpt-image',
+  'dall-e',
+  'chatgpt-image',
+  'flux',
+  'ideogram',
+  'midjourney',
+  'stable-diffusion',
+  'sd-',
+  'sdxl',
+  'kolors',
+  'recraft',
+  'imagen',
+  'seedream',
+];
+
+// 图片编辑最多支持的源图数量
+export const IMAGE_EDIT_MAX_FILES = 3;
 
 // ========== 配置默认值 ==========
 export const DEFAULT_CONFIG = {
@@ -128,4 +194,8 @@ export const ERROR_MESSAGES = {
 export const STORAGE_KEYS = {
   CONFIG: 'playground_config',
   MESSAGES: 'playground_messages',
+  IMAGE_HISTORY: 'playground_image_history',
 };
+
+// 图片历史最多保留多少个批次（防止 localStorage 占用过大）
+export const IMAGE_HISTORY_MAX_BATCHES = 30;

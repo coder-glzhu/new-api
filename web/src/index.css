@@ -31,6 +31,214 @@ body {
   background-color: var(--semi-color-bg-0);
 }
 
+.image-composer-glass {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 0 rgba(28, 31, 35, 0.04),
+    0 20px 50px -38px rgba(28, 31, 35, 0.42),
+    0 1px 12px -10px rgba(28, 31, 35, 0.3);
+  backdrop-filter: blur(24px) saturate(1.18);
+  -webkit-backdrop-filter: blur(24px) saturate(1.18);
+}
+
+.image-composer-glass::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 31px;
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(255, 255, 255, 0.32) 48%,
+    transparent 58%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  opacity: 0.22;
+  animation: image-composer-liquid-sheen 7s ease-in-out infinite;
+}
+
+.image-composer-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.image-loading-card {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(247, 248, 249, 0.46)
+    ),
+    linear-gradient(
+      28deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(236, 240, 244, 0.32) 52%,
+      rgba(255, 255, 255, 0.42)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 18px 42px -36px rgba(28, 31, 35, 0.42);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.image-loading-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 32%,
+    rgba(255, 255, 255, 0.62) 46%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  opacity: 0.42;
+  animation: image-loading-sheen 2.8s ease-in-out infinite;
+}
+
+.image-loading-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(28, 31, 35, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 31, 35, 0.035) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000000 18%,
+    #000000 82%,
+    transparent 100%
+  );
+  opacity: 0.72;
+}
+
+.image-loading-icon {
+  animation: image-loading-float 2.6s ease-in-out infinite;
+}
+
+.image-loading-bar > span {
+  animation: image-loading-progress 1.45s ease-in-out infinite;
+}
+
+html.dark .image-composer-glass {
+  background: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 44px -36px rgba(0, 0, 0, 0.8);
+}
+
+html.dark .image-composer-glass::before {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 28%,
+    transparent 46%
+  );
+  opacity: 0.28;
+}
+
+html.dark .image-loading-card {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(24, 25, 27, 0.78),
+      rgba(18, 19, 21, 0.56)
+    ),
+    linear-gradient(
+      28deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.03) 52%,
+      rgba(255, 255, 255, 0.06)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 42px -36px rgba(0, 0, 0, 0.8);
+}
+
+html.dark .image-loading-card::before {
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 32%,
+    rgba(255, 255, 255, 0.12) 46%,
+    transparent 60%,
+    transparent 100%
+  );
+}
+
+html.dark .image-loading-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+}
+
+@keyframes image-composer-liquid-sheen {
+  0%,
+  35% {
+    background-position: 130% 0;
+    opacity: 0.22;
+  }
+
+  55% {
+    background-position: -20% 0;
+    opacity: 0.42;
+  }
+
+  100% {
+    background-position: -20% 0;
+    opacity: 0.22;
+  }
+}
+
+@keyframes image-loading-sheen {
+  0% {
+    background-position: 130% 0;
+  }
+
+  58%,
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes image-loading-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes image-loading-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(220%);
+  }
+}
+
 /* 桌面端禁止 body 纵向滚动 - 防止 VChart tooltip 触发页面滚动条 */
 @media (min-width: 768px) {
   body {

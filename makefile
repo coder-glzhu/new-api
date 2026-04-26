@@ -1,7 +1,7 @@
 FRONTEND_DIR = ./web
 BACKEND_DIR = .
 
-.PHONY: all build-frontend start-backend
+.PHONY: all build-frontend start-backend dev
 
 all: build-frontend start-backend
 
@@ -12,3 +12,6 @@ build-frontend:
 start-backend:
 	@echo "Starting backend dev server..."
 	@cd $(BACKEND_DIR) && go run main.go &
+
+dev:
+	@./scripts/dev-start.sh

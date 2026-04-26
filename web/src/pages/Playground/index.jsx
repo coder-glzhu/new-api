@@ -17,10 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useContext,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Layout, Toast, Modal } from '@douyinfe/semi-ui';
+import { Layout, Toast } from '@douyinfe/semi-ui';
 
 // Context
 import { UserContext } from '../../context/User';
@@ -497,39 +502,43 @@ const Playground = () => {
           )}
 
           <Layout.Content className='relative flex-1 overflow-hidden'>
-            <div className='overflow-hidden flex flex-col lg:flex-row h-[calc(100vh-66px)] mt-[60px]'>
-              <div className='flex-1 flex flex-col'>
-                <ChatArea
-                  chatRef={chatRef}
-                  message={message}
-                  inputs={inputs}
-                  styleState={styleState}
-                  showDebugPanel={showDebugPanel}
-                  roleInfo={roleInfo}
-                  onMessageSend={onMessageSend}
-                  onMessageCopy={messageActions.handleMessageCopy}
-                  onMessageReset={messageActions.handleMessageReset}
-                  onMessageDelete={messageActions.handleMessageDelete}
-                  onStopGenerator={onStopGenerator}
-                  onClearMessages={handleClearMessages}
-                  onToggleDebugPanel={() => setShowDebugPanel(!showDebugPanel)}
-                  renderCustomChatContent={renderCustomChatContent}
-                  renderChatBoxAction={renderChatBoxAction}
-                />
-              </div>
-
-              {/* 调试面板 - 桌面端 */}
-              {showDebugPanel && !isMobile && (
-                <div className='w-96 flex-shrink-0 h-full'>
-                  <OptimizedDebugPanel
-                    debugData={debugData}
-                    activeDebugTab={activeDebugTab}
-                    onActiveDebugTabChange={setActiveDebugTab}
+            <div className='overflow-hidden flex flex-col h-[calc(100vh-66px)] mt-[60px]'>
+              <div className='flex-1 overflow-hidden flex flex-col lg:flex-row'>
+                <div className='flex-1 flex flex-col overflow-hidden'>
+                  <ChatArea
+                    chatRef={chatRef}
+                    message={message}
+                    inputs={inputs}
                     styleState={styleState}
-                    customRequestMode={customRequestMode}
+                    showDebugPanel={showDebugPanel}
+                    roleInfo={roleInfo}
+                    onMessageSend={onMessageSend}
+                    onMessageCopy={messageActions.handleMessageCopy}
+                    onMessageReset={messageActions.handleMessageReset}
+                    onMessageDelete={messageActions.handleMessageDelete}
+                    onStopGenerator={onStopGenerator}
+                    onClearMessages={handleClearMessages}
+                    onToggleDebugPanel={() =>
+                      setShowDebugPanel(!showDebugPanel)
+                    }
+                    renderCustomChatContent={renderCustomChatContent}
+                    renderChatBoxAction={renderChatBoxAction}
                   />
                 </div>
-              )}
+
+                {/* 调试面板 - 桌面端 */}
+                {showDebugPanel && !isMobile && (
+                  <div className='w-96 flex-shrink-0 h-full'>
+                    <OptimizedDebugPanel
+                      debugData={debugData}
+                      activeDebugTab={activeDebugTab}
+                      onActiveDebugTabChange={setActiveDebugTab}
+                      styleState={styleState}
+                      customRequestMode={customRequestMode}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 调试面板 - 移动端覆盖层 */}

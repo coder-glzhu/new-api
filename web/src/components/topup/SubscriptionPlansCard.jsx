@@ -23,6 +23,7 @@ import {
   Button,
   Card,
   Divider,
+  Progress,
   Select,
   Skeleton,
   Space,
@@ -46,6 +47,29 @@ function getEpayMethods(payMethods = []) {
   return (payMethods || []).filter(
     (m) => m?.type && m.type !== 'stripe' && m.type !== 'creem',
   );
+}
+
+function formatTs(ts) {
+  if (!ts) return '-';
+  return new Date(ts * 1000).toLocaleString();
+}
+
+function formatRemaining(endTs, t) {
+  if (!endTs) return t('永久有效');
+  const now = Math.floor(Date.now() / 1000);
+  const diff = endTs - now;
+  if (diff <= 0) return t('已过期');
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  if (days >= 1) return `${days} ${t('天')} ${hours} ${t('小时')}`;
+  const minutes = Math.floor((diff % 3600) / 60);
+  return `${hours} ${t('小时')} ${minutes} ${t('分钟')}`;
+}
+
+function progressColor(pct) {
+  if (pct >= 90) return 'var(--semi-color-danger)';
+  if (pct >= 70) return 'var(--semi-color-warning)';
+  return 'var(--semi-color-primary)';
 }
 
 // 提交易支付表单
@@ -222,34 +246,18 @@ const SubscriptionPlansCard = ({
     return map;
   }, [allSubscriptions]);
 
-  const planTitleMap = useMemo(() => {
+  const planMap = useMemo(() => {
     const map = new Map();
     (plans || []).forEach((p) => {
       const plan = p?.plan;
       if (!plan?.id) return;
-      map.set(plan.id, plan.title || '');
+      map.set(plan.id, plan);
     });
     return map;
   }, [plans]);
 
   const getPlanPurchaseCount = (planId) =>
     planPurchaseCountMap.get(planId) || 0;
-
-  // 计算单个订阅的剩余天数
-  const getRemainingDays = (sub) => {
-    if (!sub?.subscription?.end_time) return 0;
-    const now = Date.now() / 1000;
-    const remaining = sub.subscription.end_time - now;
-    return Math.max(0, Math.ceil(remaining / 86400));
-  };
-
-  // 计算单个订阅的使用进度
-  const getUsagePercent = (sub) => {
-    const total = Number(sub?.subscription?.amount_total || 0);
-    const used = Number(sub?.subscription?.amount_used || 0);
-    if (total <= 0) return 0;
-    return Math.round((used / total) * 100);
-  };
 
   const cardContent = (
     <>
@@ -377,101 +385,161 @@ const SubscriptionPlansCard = ({
             {hasAnySubscription ? (
               <>
                 <Divider margin={8} />
-                <div className='max-h-64 overflow-y-auto pr-1 semi-table-body'>
-                  {allSubscriptions.map((sub, subIndex) => {
-                    const isLast = subIndex === allSubscriptions.length - 1;
-                    const subscription = sub.subscription;
-                    const totalAmount = Number(subscription?.amount_total || 0);
-                    const usedAmount = Number(subscription?.amount_used || 0);
-                    const remainAmount =
-                      totalAmount > 0
-                        ? Math.max(0, totalAmount - usedAmount)
-                        : 0;
-                    const planTitle =
-                      planTitleMap.get(subscription?.plan_id) || '';
-                    const remainDays = getRemainingDays(sub);
-                    const usagePercent = getUsagePercent(sub);
+                <div className='max-h-[28rem] overflow-y-auto pr-1 flex flex-col gap-2'>
+                  {allSubscriptions.map((sub) => {
+                    const subscription = sub?.subscription;
+                    if (!subscription) return null;
+                    const plan = planMap.get(subscription.plan_id);
+                    const total = Number(subscription.amount_total || 0);
+                    const used = Number(subscription.amount_used || 0);
+                    const remaining = Math.max(0, total - used);
+                    const unlimited = total === 0;
+                    const pct = unlimited
+                      ? 0
+                      : Math.min(100, Math.round((used / total) * 100));
                     const now = Date.now() / 1000;
-                    const isExpired = (subscription?.end_time || 0) < now;
-                    const isCancelled = subscription?.status === 'cancelled';
+                    const isExpired =
+                      (subscription.end_time || 0) > 0 &&
+                      (subscription.end_time || 0) < now;
+                    const isCancelled = subscription.status === 'cancelled';
                     const isActive =
-                      subscription?.status === 'active' && !isExpired;
+                      subscription.status === 'active' && !isExpired;
+                    const dim = !isActive;
+
+                    let timePct = 0;
+                    if (
+                      subscription.start_time &&
+                      subscription.end_time &&
+                      subscription.end_time > subscription.start_time
+                    ) {
+                      const span =
+                        subscription.end_time - subscription.start_time;
+                      const elapsed = Math.max(
+                        0,
+                        Math.min(span, now - subscription.start_time),
+                      );
+                      timePct = Math.round((elapsed / span) * 100);
+                    }
 
                     return (
-                      <div key={subscription?.id || subIndex}>
-                        {/* 订阅概要 */}
-                        <div className='flex items-center justify-between text-xs mb-2'>
-                          <div className='flex items-center gap-2'>
-                            <span className='font-medium'>
-                              {planTitle
-                                ? `${planTitle} · ${t('订阅')} #${subscription?.id}`
-                                : `${t('订阅')} #${subscription?.id}`}
+                      <div
+                        key={subscription.id}
+                        className={`border border-gray-200 dark:border-gray-700 rounded-xl p-3 ${
+                          dim ? 'opacity-70' : ''
+                        }`}
+                      >
+                        {/* 标题行 */}
+                        <div className='flex items-start justify-between gap-2 flex-wrap'>
+                          <div className='flex items-center gap-2 min-w-0'>
+                            <span className='font-medium truncate'>
+                              {plan?.title || `#${subscription.plan_id}`}
                             </span>
+                            <Text
+                              type='tertiary'
+                              size='small'
+                              className='text-gray-400'
+                            >
+                              #{subscription.id}
+                            </Text>
                             {isActive ? (
                               <Tag
-                                color='white'
+                                color='green'
                                 size='small'
                                 shape='circle'
                                 prefixIcon={<Badge dot type='success' />}
                               >
-                                {t('生效')}
+                                {t('生效中')}
                               </Tag>
                             ) : isCancelled ? (
-                              <Tag color='white' size='small' shape='circle'>
+                              <Tag color='grey' size='small' shape='circle'>
                                 {t('已作废')}
                               </Tag>
                             ) : (
-                              <Tag color='white' size='small' shape='circle'>
+                              <Tag color='orange' size='small' shape='circle'>
                                 {t('已过期')}
                               </Tag>
                             )}
                           </div>
-                          {isActive && (
-                            <span className='text-gray-500'>
-                              {t('剩余')} {remainDays} {t('天')}
-                            </span>
+                          {plan && (
+                            <Text type='tertiary' size='small'>
+                              {formatSubscriptionDuration(plan, t)}
+                            </Text>
                           )}
                         </div>
-                        <div className='text-xs text-gray-500 mb-2'>
-                          {isActive
-                            ? t('至')
-                            : isCancelled
-                              ? t('作废于')
-                              : t('过期于')}{' '}
-                          {new Date(
-                            (subscription?.end_time || 0) * 1000,
-                          ).toLocaleString()}
-                        </div>
-                        {isActive && subscription?.next_reset_time > 0 && (
-                          <div className='text-xs text-gray-500 mb-2'>
-                            {t('下一次重置')}:{' '}
-                            {new Date(
-                              subscription.next_reset_time * 1000,
-                            ).toLocaleString()}
-                          </div>
-                        )}
-                        <div className='text-xs text-gray-500 mb-2'>
-                          {t('总额度')}:{' '}
-                          {totalAmount > 0 ? (
-                            <Tooltip
-                              content={`${t('原生额度')}：${usedAmount}/${totalAmount} · ${t('剩余')} ${remainAmount}`}
-                            >
-                              <span>
-                                {renderQuota(usedAmount)}/
-                                {renderQuota(totalAmount)} · {t('剩余')}{' '}
-                                {renderQuota(remainAmount)}
+
+                        {/* 额度进度 */}
+                        <div className='mt-2'>
+                          <div className='flex flex-wrap justify-between items-baseline mb-1.5 gap-x-3 text-xs'>
+                            <span className='text-gray-600 dark:text-gray-300'>
+                              {t('已用')}{' '}
+                              <span className='font-semibold text-gray-900 dark:text-gray-100'>
+                                {renderQuota(used)}
                               </span>
-                            </Tooltip>
-                          ) : (
-                            t('不限')
-                          )}
-                          {totalAmount > 0 && (
-                            <span className='ml-2'>
-                              {t('已用')} {usagePercent}%
+                              <span className='mx-1 text-gray-400'>·</span>
+                              {t('剩余')}{' '}
+                              <span className='font-semibold text-gray-900 dark:text-gray-100'>
+                                {unlimited ? t('不限') : renderQuota(remaining)}
+                              </span>
                             </span>
-                          )}
+                            <span className='text-gray-500'>
+                              {t('总额')}:{' '}
+                              {unlimited ? t('不限') : renderQuota(total)}
+                              {!unlimited && (
+                                <span
+                                  className='ml-2 font-semibold'
+                                  style={{ color: progressColor(pct) }}
+                                >
+                                  {pct}%
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <Progress
+                            percent={unlimited ? 100 : pct}
+                            stroke={
+                              unlimited
+                                ? 'var(--semi-color-success)'
+                                : progressColor(pct)
+                            }
+                            showInfo={false}
+                            size='large'
+                          />
                         </div>
-                        {!isLast && <Divider margin={12} />}
+
+                        {/* 时长信息 */}
+                        <div className='mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-gray-500'>
+                          <div>
+                            {t('开始')}: {formatTs(subscription.start_time)}
+                          </div>
+                          <div>
+                            {t('到期')}: {formatTs(subscription.end_time)}
+                          </div>
+                          <div className='sm:col-span-2'>
+                            <span>{t('剩余时长')}: </span>
+                            <span className='font-medium text-gray-700 dark:text-gray-200'>
+                              {formatRemaining(subscription.end_time, t)}
+                            </span>
+                            {subscription.start_time > 0 &&
+                              subscription.end_time > 0 && (
+                                <span className='ml-2 text-gray-400'>
+                                  ({timePct}%)
+                                </span>
+                              )}
+                          </div>
+                          {plan?.quota_reset_period &&
+                            plan.quota_reset_period !== 'never' && (
+                              <div className='sm:col-span-2'>
+                                {t('额度重置')}:{' '}
+                                {formatSubscriptionResetPeriod(plan, t)}
+                                {subscription.next_reset_time > 0 && (
+                                  <span className='ml-1 text-gray-400'>
+                                    ({t('下次')}:{' '}
+                                    {formatTs(subscription.next_reset_time)})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                        </div>
                       </div>
                     );
                   })}
@@ -552,16 +620,30 @@ const SubscriptionPlansCard = ({
                         >
                           {plan?.title || t('订阅套餐')}
                         </Typography.Title>
-                        {plan?.subtitle && (
-                          <Text
-                            type='tertiary'
-                            size='small'
-                            ellipsis={{ rows: 1, showTooltip: true }}
-                            style={{ display: 'block' }}
-                          >
-                            {plan.subtitle}
-                          </Text>
-                        )}
+                        <div
+                          style={{
+                            minHeight: 36,
+                            marginTop: 2,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          {plan?.subtitle ? (
+                            <Text
+                              type='tertiary'
+                              size='small'
+                              ellipsis={{
+                                rows: 2,
+                                showTooltip: {
+                                  opts: { content: plan.subtitle },
+                                },
+                              }}
+                              style={{ display: 'block', width: '100%' }}
+                            >
+                              {plan.subtitle}
+                            </Text>
+                          ) : null}
+                        </div>
                       </div>
 
                       {/* 价格区域 */}

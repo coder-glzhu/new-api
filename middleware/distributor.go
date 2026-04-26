@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -291,17 +290,28 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			modelRequest.Model = c.Param("model")
 		}
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") {
-		modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "dall-e")
-	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/images/edits") {
-		//modelRequest.Model = common.GetStringIfEmpty(c.PostForm("model"), "gpt-image-1")
-		contentType := c.ContentType()
-		if slices.Contains([]string{gin.MIMEPOSTForm, gin.MIMEMultipartPOSTForm}, contentType) {
-			req, err := getModelFromRequest(c)
-			if err == nil && req.Model != "" {
+	isImageGenerationPath := strings.Contains(c.Request.URL.Path, "/images/generations")
+	isImageEditPath := strings.Contains(c.Request.URL.Path, "/images/edits")
+	isPlaygroundImagePath := strings.HasPrefix(c.Request.URL.Path, "/pg/images/")
+	if isImageGenerationPath {
+		if modelRequest.Model == "" {
+			if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
 				modelRequest.Model = req.Model
+				modelRequest.Group = req.Group
 			}
 		}
+		modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "dall-e")
+	} else if isImageEditPath {
+		if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
+			modelRequest.Model = req.Model
+			modelRequest.Group = req.Group
+		}
+		if isPlaygroundImagePath {
+			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "gpt-image-2")
+		}
+	}
+	if isPlaygroundImagePath && modelRequest.Group != "" {
+		common.SetContextKey(c, constant.ContextKeyTokenGroup, modelRequest.Group)
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/audio") {
 		relayMode := relayconstant.RelayModeAudioSpeech

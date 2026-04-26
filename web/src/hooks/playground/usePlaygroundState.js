@@ -23,14 +23,28 @@ import {
   DEFAULT_MESSAGES,
   getDefaultMessages,
   DEFAULT_CONFIG,
+  DEFAULT_IMAGE_INPUTS,
   DEBUG_TABS,
   MESSAGE_STATUS,
+  PLAYGROUND_MODES,
+  IMAGE_HISTORY_MAX_BATCHES,
 } from '../../constants/playground.constants';
 import {
   loadConfig,
   saveConfig,
   loadMessages,
   saveMessages,
+  loadImageHistory,
+  saveImageHistory,
+  hydrateImageHistory,
+  clearImageHistory,
+  isFileSystemStorageSupported,
+  saveImageDirectoryHandle,
+  loadImageDirectoryHandle,
+  clearImageDirectoryHandle,
+  requestImageDirectoryPermission,
+  saveImageBatchToDirectory,
+  hydrateFileSystemImageHistory,
 } from '../../components/playground/configStorage';
 import { processIncompleteThinkTags } from '../../helpers';
 
@@ -79,6 +93,35 @@ export const usePlaygroundState = () => {
     savedConfig.customRequestBody || DEFAULT_CONFIG.customRequestBody,
   );
 
+  // 操练场模式 (chat | image_generation | image_edit)
+  const [mode, setMode] = useState(savedConfig.mode || PLAYGROUND_MODES.CHAT);
+
+  // 图片生成 / 编辑共用的输入参数
+  const [imageInputs, setImageInputs] = useState(
+    savedConfig.imageInputs || DEFAULT_IMAGE_INPUTS,
+  );
+
+  // 图片编辑模式上传的源图（不持久化，刷新即丢失）
+  const [imageEditFiles, setImageEditFiles] = useState([]);
+
+  const [initialImageHistory] = useState(() => loadImageHistory());
+
+  // 图片生成历史批次（持久化）
+  const [imageHistory, setImageHistory] = useState(initialImageHistory);
+
+  // 当前正在进行中的图片批次（流式占位，不持久化）
+  const [pendingImageBatch, setPendingImageBatch] = useState(null);
+
+  const [imageStorageSupported] = useState(() =>
+    isFileSystemStorageSupported(),
+  );
+  const [imageStorageMode, setImageStorageMode] = useState('indexeddb');
+  const [imageDirectoryHandle, setImageDirectoryHandle] = useState(null);
+  const [imageDirectoryName, setImageDirectoryName] = useState('');
+  const [imageStoragePermission, setImageStoragePermission] = useState(
+    imageStorageSupported ? 'prompt' : 'unsupported',
+  );
+
   // UI状态
   const [showSettings, setShowSettings] = useState(false);
   const [models, setModels] = useState([]);
@@ -124,6 +167,122 @@ export const usePlaygroundState = () => {
     setInputs((prev) => ({ ...prev, [name]: value }));
   }, []);
 
+  // 图片输入更新
+  const handleImageInputChange = useCallback((name, value) => {
+    setImageInputs((prev) => ({ ...prev, [name]: value }));
+  }, []);
+
+  // 添加一个新的图片批次（生成或编辑），自动 prepend
+  const addImageBatch = useCallback((batch) => {
+    if (!batch) return;
+    setImageHistory((prev) => {
+      const next = [batch, ...prev].slice(0, IMAGE_HISTORY_MAX_BATCHES);
+      saveImageHistory(next);
+      return next;
+    });
+  }, []);
+
+  const persistImageHistory = useCallback(
+    async (next) => {
+      if (
+        imageStorageMode !== 'filesystem' ||
+        !imageDirectoryHandle ||
+        imageStoragePermission !== 'granted'
+      ) {
+        saveImageHistory(next);
+        return;
+      }
+
+      const saved = await Promise.all(
+        next.map((batch) =>
+          saveImageBatchToDirectory(batch, imageDirectoryHandle),
+        ),
+      );
+      saveImageHistory(saved);
+      setImageHistory((prev) => {
+        const prevIds = prev.map((batch) => batch?.id).join('|');
+        const nextIds = next.map((batch) => batch?.id).join('|');
+        return prevIds === nextIds ? saved : prev;
+      });
+    },
+    [imageDirectoryHandle, imageStorageMode, imageStoragePermission],
+  );
+
+  // 更新某个批次（流式过程更新或失败标记）
+  const updateImageBatch = useCallback(
+    (batchId, updater) => {
+      if (!batchId) return;
+      setImageHistory((prev) => {
+        const next = prev.map((b) =>
+          b?.id === batchId
+            ? {
+                ...b,
+                ...(typeof updater === 'function' ? updater(b) : updater),
+              }
+            : b,
+        );
+        persistImageHistory(next).catch(() => saveImageHistory(next));
+        return next;
+      });
+    },
+    [persistImageHistory],
+  );
+
+  // 删除某个批次
+  const removeImageBatch = useCallback((batchId) => {
+    if (!batchId) return;
+    setImageHistory((prev) => {
+      const next = prev.filter((b) => b?.id !== batchId);
+      saveImageHistory(next);
+      return next;
+    });
+  }, []);
+
+  // 清空图片历史
+  const clearImageHistoryAll = useCallback(() => {
+    setImageHistory([]);
+    clearImageHistory();
+  }, []);
+
+  const chooseImageDirectory = useCallback(async () => {
+    if (!isFileSystemStorageSupported()) {
+      setImageStoragePermission('unsupported');
+      setImageStorageMode('indexeddb');
+      return null;
+    }
+
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const permission = await requestImageDirectoryPermission(handle);
+      if (permission !== 'granted') {
+        setImageStoragePermission(permission || 'denied');
+        setImageStorageMode('indexeddb');
+        return null;
+      }
+
+      await saveImageDirectoryHandle(handle);
+      setImageDirectoryHandle(handle);
+      setImageDirectoryName(handle.name || '');
+      setImageStoragePermission('granted');
+      setImageStorageMode('filesystem');
+      return handle;
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        setImageStoragePermission('denied');
+        setImageStorageMode('indexeddb');
+      }
+      return null;
+    }
+  }, []);
+
+  const clearImageDirectory = useCallback(async () => {
+    await clearImageDirectoryHandle().catch(() => {});
+    setImageDirectoryHandle(null);
+    setImageDirectoryName('');
+    setImageStorageMode('indexeddb');
+    setImageStoragePermission(imageStorageSupported ? 'prompt' : 'unsupported');
+  }, [imageStorageSupported]);
+
   const handleParameterToggle = useCallback((paramName) => {
     setParameterEnabled((prev) => ({
       ...prev,
@@ -153,6 +312,8 @@ export const usePlaygroundState = () => {
         showDebugPanel,
         customRequestMode,
         customRequestBody,
+        mode,
+        imageInputs,
       };
       saveConfig(configToSave);
     }, 1000);
@@ -162,6 +323,8 @@ export const usePlaygroundState = () => {
     showDebugPanel,
     customRequestMode,
     customRequestBody,
+    mode,
+    imageInputs,
   ]);
 
   // 配置导入/重置
@@ -191,6 +354,15 @@ export const usePlaygroundState = () => {
     if (importedConfig.customRequestBody) {
       setCustomRequestBody(importedConfig.customRequestBody);
     }
+    if (importedConfig.imageInputs) {
+      setImageInputs((prev) => ({ ...prev, ...importedConfig.imageInputs }));
+    }
+    if (
+      importedConfig.mode &&
+      Object.values(PLAYGROUND_MODES).includes(importedConfig.mode)
+    ) {
+      setMode(importedConfig.mode);
+    }
     // 如果导入的配置包含消息，也恢复消息
     if (importedConfig.messages && Array.isArray(importedConfig.messages)) {
       setMessage(importedConfig.messages);
@@ -205,6 +377,7 @@ export const usePlaygroundState = () => {
     setShowDebugPanel(DEFAULT_CONFIG.showDebugPanel);
     setCustomRequestMode(DEFAULT_CONFIG.customRequestMode);
     setCustomRequestBody(DEFAULT_CONFIG.customRequestBody);
+    setImageInputs(DEFAULT_IMAGE_INPUTS);
 
     // 只有在明确指定时才重置消息
     if (resetMessages) {
@@ -254,6 +427,59 @@ export const usePlaygroundState = () => {
     }
   }, []);
 
+  // 图片历史中的 base64 结果保存在 IndexedDB，首屏先展示元数据，再异步补齐图片内容
+  useEffect(() => {
+    let cancelled = false;
+    const initialIds = initialImageHistory.map((batch) => batch?.id).join('|');
+
+    const loadDirectory = async () => {
+      if (!imageStorageSupported) return null;
+      try {
+        const handle = await loadImageDirectoryHandle();
+        if (!handle) return null;
+        const permission = await requestImageDirectoryPermission(
+          handle,
+          'readwrite',
+        );
+        if (permission !== 'granted') {
+          setImageStoragePermission(permission || 'prompt');
+          return null;
+        }
+        if (cancelled) return null;
+        setImageDirectoryHandle(handle);
+        setImageDirectoryName(handle.name || '');
+        setImageStoragePermission('granted');
+        setImageStorageMode('filesystem');
+        return handle;
+      } catch (_) {
+        setImageStorageMode('indexeddb');
+        return null;
+      }
+    };
+
+    const hydrate = async () => {
+      const handle = await loadDirectory();
+      let hydrated = await hydrateImageHistory(initialImageHistory);
+      if (handle) {
+        hydrated = await hydrateFileSystemImageHistory(hydrated, handle);
+      }
+      if (cancelled || !Array.isArray(hydrated)) return;
+      setImageHistory((prev) => {
+        if (prev.map((batch) => batch?.id).join('|') !== initialIds)
+          return prev;
+        const current = JSON.stringify(prev);
+        const next = JSON.stringify(hydrated);
+        return current === next ? prev : hydrated;
+      });
+    };
+
+    hydrate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageStorageSupported, initialImageHistory]);
+
   return {
     // 配置状态
     inputs,
@@ -261,6 +487,17 @@ export const usePlaygroundState = () => {
     showDebugPanel,
     customRequestMode,
     customRequestBody,
+
+    // 模式与图片相关状态
+    mode,
+    imageInputs,
+    imageEditFiles,
+    imageHistory,
+    pendingImageBatch,
+    imageStorageSupported,
+    imageStorageMode,
+    imageDirectoryName,
+    imageStoragePermission,
 
     // UI状态
     showSettings,
@@ -301,10 +538,22 @@ export const usePlaygroundState = () => {
     setPreviewPayload,
     setEditingMessageId,
     setEditValue,
+    setMode,
+    setImageInputs,
+    setImageEditFiles,
+    setImageHistory,
+    setPendingImageBatch,
 
     // 处理函数
     handleInputChange,
     handleParameterToggle,
+    handleImageInputChange,
+    addImageBatch,
+    updateImageBatch,
+    removeImageBatch,
+    clearImageHistoryAll,
+    chooseImageDirectory,
+    clearImageDirectory,
     debouncedSaveConfig,
     saveMessagesImmediately,
     handleConfigImport,
