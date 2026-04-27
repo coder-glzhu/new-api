@@ -118,6 +118,13 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeCurrency"] = setting.WaffoPancakeCurrency
 	common.OptionMap["WaffoPancakeUnitPrice"] = strconv.FormatFloat(setting.WaffoPancakeUnitPrice, 'f', -1, 64)
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
+	common.OptionMap["HupijiaoEnabled"] = strconv.FormatBool(setting.HupijiaoEnabled)
+	common.OptionMap["HupijiaoAppId"] = setting.HupijiaoAppId
+	common.OptionMap["HupijiaoAppSecret"] = setting.HupijiaoAppSecret
+	common.OptionMap["HupijiaoApiUrl"] = setting.HupijiaoApiUrl
+	common.OptionMap["HupijiaoNotifyUrl"] = setting.HupijiaoNotifyUrl
+	common.OptionMap["HupijiaoReturnUrl"] = setting.HupijiaoReturnUrl
+	common.OptionMap["HupijiaoMinTopUp"] = strconv.Itoa(setting.HupijiaoMinTopUp)
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -443,6 +450,20 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
+	case "HupijiaoEnabled":
+		setting.HupijiaoEnabled = value == "true"
+	case "HupijiaoAppId":
+		setting.HupijiaoAppId = value
+	case "HupijiaoAppSecret":
+		setting.HupijiaoAppSecret = value
+	case "HupijiaoApiUrl":
+		setting.HupijiaoApiUrl = value
+	case "HupijiaoNotifyUrl":
+		setting.HupijiaoNotifyUrl = value
+	case "HupijiaoReturnUrl":
+		setting.HupijiaoReturnUrl = value
+	case "HupijiaoMinTopUp":
+		setting.HupijiaoMinTopUp, _ = strconv.Atoi(value)
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":

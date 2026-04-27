@@ -48,6 +48,12 @@ func SubscriptionRequestEpay(c *gin.Context) {
 	}
 
 	userId := c.GetInt("id")
+
+	if hasActive, chkErr := model.HasActiveUserSubscription(userId); chkErr == nil && hasActive {
+		common.ApiErrorMsg(c, "您已有生效中的订阅，请等待到期后再购买")
+		return
+	}
+
 	if plan.MaxPurchasePerUser > 0 {
 		count, err := model.CountUserSubscriptionsByPlan(userId, plan.Id)
 		if err != nil {

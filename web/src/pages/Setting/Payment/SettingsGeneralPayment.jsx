@@ -35,6 +35,7 @@ export default function SettingsGeneralPayment(props) {
   const [inputs, setInputs] = useState({
     ServerAddress: '',
     CustomCallbackAddress: '',
+    Price: 7.3,
     TopupGroupRatio: '',
     PayMethods: '',
     AmountOptions: '',
@@ -48,6 +49,7 @@ export default function SettingsGeneralPayment(props) {
       const currentInputs = {
         ServerAddress: props.options.ServerAddress || '',
         CustomCallbackAddress: props.options.CustomCallbackAddress || '',
+        Price: props.options.Price !== undefined ? parseFloat(props.options.Price) : 7.3,
         TopupGroupRatio: props.options.TopupGroupRatio || '',
         PayMethods: props.options.PayMethods || '',
         AmountOptions: props.options.AmountOptions || '',
@@ -112,6 +114,9 @@ export default function SettingsGeneralPayment(props) {
           key: 'CustomCallbackAddress',
           value: removeTrailingSlash(inputs.CustomCallbackAddress),
         });
+      }
+      if (originInputs.Price !== inputs.Price) {
+        options.push({ key: 'Price', value: String(inputs.Price) });
       }
       if (originInputs.TopupGroupRatio !== inputs.TopupGroupRatio) {
         options.push({ key: 'TopupGroupRatio', value: inputs.TopupGroupRatio });
@@ -178,17 +183,28 @@ export default function SettingsGeneralPayment(props) {
             gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
             style={{ marginTop: 16 }}
           >
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.InputNumber
+                field='Price'
+                label={t('充值比例')}
+                placeholder={t('例如：0.2 表示 1元=5美元')}
+                precision={2}
+                min={0.01}
+                step={0.1}
+                extraText={t('1美元对应的人民币价格。例如：0.2表示1元可充5美元')}
+              />
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='CustomCallbackAddress'
                 label={t('回调地址')}
                 placeholder={t('例如：https://yourdomain.com')}
                 extraText={t(
-                  '留空时默认使用服务器地址作为回调地址，填写后将覆盖默认值',
+                  '留空时默认使用服务器地址作为回调地址',
                 )}
               />
             </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.TextArea
                 field='TopupGroupRatio'
                 label={t('充值分组倍率')}

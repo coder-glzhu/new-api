@@ -50,6 +50,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/creem/webhook", controller.CreemWebhook)
 		apiRouter.POST("/waffo/webhook", controller.WaffoWebhook)
 		//apiRouter.POST("/waffo-pancake/webhook", controller.WaffoPancakeWebhook)
+		apiRouter.POST("/hupijiao/webhook", controller.HupijiaoWebhook)
+		apiRouter.GET("/hupijiao/webhook", controller.HupijiaoWebhook)
 
 		// Universal secure verification routes
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), controller.UniversalVerify)
@@ -95,6 +97,11 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPay)
 				//selfRoute.POST("/waffo-pancake/amount", controller.RequestWaffoPancakeAmount)
 				//selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
+				selfRoute.POST("/hupijiao/pay", middleware.CriticalRateLimit(), controller.RequestHupijiaoPay)
+				selfRoute.POST("/hupijiao/amount", controller.RequestHupijiaoAmount)
+				selfRoute.GET("/topup/:trade_no/status", controller.GetTopUpOrderStatus)
+				selfRoute.DELETE("/topup/:trade_no", controller.CancelTopUpOrder)
+				selfRoute.POST("/topup/:trade_no/repay", middleware.CriticalRateLimit(), controller.RepayTopUpOrder)
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 
@@ -147,6 +154,8 @@ func SetApiRouter(router *gin.Engine) {
 			subscriptionRoute.POST("/epay/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestEpay)
 			subscriptionRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestStripePay)
 			subscriptionRoute.POST("/creem/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestCreemPay)
+			subscriptionRoute.POST("/hupijiao/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestHupijiao)
+			subscriptionRoute.GET("/order/:trade_no/status", controller.GetSubscriptionOrderStatus)
 		}
 		subscriptionAdminRoute := apiRouter.Group("/subscription/admin")
 		subscriptionAdminRoute.Use(middleware.AdminAuth())

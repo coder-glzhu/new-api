@@ -17,6 +17,7 @@ type TopUp struct {
 	Amount          int64   `json:"amount"`
 	Money           float64 `json:"money"`
 	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	OpenOrderId     string  `json:"open_order_id" gorm:"type:varchar(100);default:''"`
 	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
 	CreateTime      int64   `json:"create_time"`
@@ -29,6 +30,7 @@ const (
 	PaymentMethodCreem        = "creem"
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
+	PaymentMethodHupijiao     = "hupijiao"
 )
 
 const (
@@ -37,6 +39,7 @@ const (
 	PaymentProviderCreem        = "creem"
 	PaymentProviderWaffo        = "waffo"
 	PaymentProviderWaffoPancake = "waffo_pancake"
+	PaymentProviderHupijiao     = "hupijiao"
 )
 
 var (
@@ -584,4 +587,114 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	}
 
 	return nil
+}
+
+// RechargeByHupijiao processes Hupijiao payment callback and increases user quota
+func RechargeByHupijiao(tradeNo string, amount float64) error {
+	if tradeNo == "" {
+		return errors.New("未提供订单号")
+	}
+
+	var topUp TopUp
+	var quotaToAdd int
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 锁定订单记录
+		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(&topUp).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTopUpNotFound
+			}
+			return fmt.Errorf("查询订单失败: %w", err)
+		}
+
+		// 验证支付方式
+		if topUp.PaymentProvider != PaymentProviderHupijiao {
+			return ErrPaymentMethodMismatch
+		}
+
+		// 幂等性检查
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil // 已成功，直接返回
+		}
+
+		// 验证订单状态
+		if topUp.Status != common.TopUpStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+
+		// 金额验证（实际支付金额必须大于等于应付金额，允许0.01元误差）
+		if amount < topUp.Money-0.01 {
+			return fmt.Errorf("支付金额不足: 应付%.2f元, 实际支付%.2f元", topUp.Money, amount)
+		}
+		// 如果用户多付了，也允许通过（虎皮椒可能存在手续费差异）
+		if amount > topUp.Money+1.0 {
+			return fmt.Errorf("支付金额异常: 应付%.2f元, 实际支付%.2f元", topUp.Money, amount)
+		}
+
+		// 计算充值配额
+		dAmount := decimal.NewFromInt(topUp.Amount)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		if quotaToAdd <= 0 {
+			return errors.New("无效的充值额度")
+		}
+
+		// 更新订单状态
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		if err := tx.Save(&topUp).Error; err != nil {
+			return fmt.Errorf("更新订单失败: %w", err)
+		}
+
+		// 增加用户配额
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return fmt.Errorf("增加配额失败: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		common.SysError("hupijiao topup failed: " + err.Error())
+		return err
+	}
+
+	// 记录充值日志
+	if quotaToAdd > 0 {
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("虎皮椒充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
+	}
+
+	return nil
+}
+
+// CountUserPendingTopUps 统计用户指定支付方式的待支付订单数量（防刷单）
+func CountUserPendingTopUps(userId int, paymentProvider string) (int64, error) {
+	var count int64
+	err := DB.Model(&TopUp{}).
+		Where("user_id = ? AND payment_provider = ? AND status = ?", userId, paymentProvider, common.TopUpStatusPending).
+		Count(&count).Error
+	return count, err
+}
+
+// ExpirePendingTopUps 批量取消过期的待支付订单
+// expireTimestamp: 创建时间早于此时间戳的订单将被取消
+// limit: 每次批量处理的数量
+// 返回实际取消的订单数量
+func ExpirePendingTopUps(expireTimestamp int64, limit int) (int, error) {
+	result := DB.Model(&TopUp{}).
+		Where("status = ? AND create_time < ?", common.TopUpStatusPending, expireTimestamp).
+		Limit(limit).
+		Update("status", common.TopUpStatusExpired)
+
+	if result.Error != nil {
+		return 0, result.Error
+	}
+
+	return int(result.RowsAffected), nil
 }

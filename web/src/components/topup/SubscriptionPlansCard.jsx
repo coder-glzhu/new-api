@@ -32,9 +32,9 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess, renderQuota } from '../../helpers';
-import { getCurrencyConfig } from '../../helpers/render';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
+import AlipayQRModal from './modals/AlipayQRModal';
 import {
   formatSubscriptionDuration,
   formatSubscriptionResetPeriod,
@@ -101,6 +101,7 @@ const SubscriptionPlansCard = ({
   enableOnlineTopUp = false,
   enableStripeTopUp = false,
   enableCreemTopUp = false,
+  enableHupijiaoTopUp = false,
   billingPreference,
   onChangeBillingPreference,
   activeSubscriptions = [],
@@ -113,6 +114,7 @@ const SubscriptionPlansCard = ({
   const [paying, setPaying] = useState(false);
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [qrModal, setQrModal] = useState({ visible: false, qrcodeUrl: '', orderId: '', tradeNo: '', amount: 0 });
 
   const epayMethods = useMemo(() => getEpayMethods(payMethods), [payMethods]);
 
@@ -219,6 +221,57 @@ const SubscriptionPlansCard = ({
       showError(t('支付请求失败'));
     } finally {
       setPaying(false);
+    }
+  };
+
+  const payHupijiao = async () => {
+    setPaying(true);
+    try {
+      const res = await API.post('/api/subscription/hupijiao/pay', {
+        plan_id: selectedPlan.plan.id,
+      });
+      const { success, data, message, error } = res.data || {};
+      const resData = data || res.data;
+      if (success || resData?.qrcode_url || resData?.pay_url) {
+        if (resData.qrcode_url) {
+          closeBuy();
+          setQrModal({
+            visible: true,
+            qrcodeUrl: resData.qrcode_url,
+            orderId: resData.order_id || '',
+            tradeNo: resData.trade_no,
+            amount: Number(selectedPlan?.plan?.price_cny || 0),
+          });
+        } else if (resData.pay_url) {
+          window.location.href = resData.pay_url;
+        }
+      } else {
+        showError(error || message || t('支付失败'));
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleSubQrCheckPaid = async () => {
+    const { tradeNo, orderId } = qrModal;
+    try {
+      const statusRes = await API.get(
+        `/api/subscription/order/${tradeNo}/status?openid=${encodeURIComponent(orderId)}`,
+      );
+      if (statusRes.data?.data?.paid) {
+        showSuccess(t('支付成功！订阅已生效'));
+        setQrModal((s) => ({ ...s, visible: false }));
+        reloadSubscriptionSelf?.();
+        return true;
+      }
+      showError(statusRes.data?.message || t('订单尚未支付，请完成支付后再试'));
+      return false;
+    } catch {
+      showError(t('查询订单状态失败'));
+      return false;
     }
   };
 
@@ -558,12 +611,10 @@ const SubscriptionPlansCard = ({
               {plans.map((p, index) => {
                 const plan = p?.plan;
                 const totalAmount = Number(plan?.total_amount || 0);
-                const { symbol, rate } = getCurrencyConfig();
-                const price = Number(plan?.price_amount || 0);
-                const convertedPrice = price * rate;
-                const displayPrice = convertedPrice.toFixed(
-                  Number.isInteger(convertedPrice) ? 0 : 2,
-                );
+                const priceCNY = Number(plan?.price_cny || 0);
+                const displayPrice = priceCNY > 0
+                  ? priceCNY.toFixed(Number.isInteger(priceCNY) ? 0 : 2)
+                  : '0';
                 const isPopular = index === 0 && plans.length > 1;
                 const limit = Number(plan?.max_purchase_per_user || 0);
                 const limitLabel = limit > 0 ? `${t('限购')} ${limit}` : null;
@@ -650,7 +701,7 @@ const SubscriptionPlansCard = ({
                       <div className='py-2'>
                         <div className='flex items-baseline justify-start'>
                           <span className='text-xl font-bold text-purple-600'>
-                            {symbol}
+                            ¥
                           </span>
                           <span className='text-3xl font-bold text-purple-600'>
                             {displayPrice}
@@ -694,23 +745,31 @@ const SubscriptionPlansCard = ({
                         {(() => {
                           const count = getPlanPurchaseCount(p?.plan?.id);
                           const reached = limit > 0 && count >= limit;
-                          const tip = reached
-                            ? t('已达到购买上限') + ` (${count}/${limit})`
-                            : '';
+                          const disabled = reached || hasActiveSubscription;
+                          const tip = hasActiveSubscription
+                            ? t('当前已有生效中的订阅，请等待到期后再购买')
+                            : reached
+                              ? t('已达到购买上限') + ` (${count}/${limit})`
+                              : '';
+                          const label = hasActiveSubscription
+                            ? t('已有订阅')
+                            : reached
+                              ? t('已达上限')
+                              : t('立即订阅');
                           const buttonEl = (
                             <Button
                               theme='outline'
                               type='primary'
                               block
-                              disabled={reached}
+                              disabled={disabled}
                               onClick={() => {
-                                if (!reached) openBuy(p);
+                                if (!disabled) openBuy(p);
                               }}
                             >
-                              {reached ? t('已达上限') : t('立即订阅')}
+                              {label}
                             </Button>
                           );
-                          return reached ? (
+                          return disabled ? (
                             <Tooltip content={tip} position='top'>
                               {buttonEl}
                             </Tooltip>
@@ -755,6 +814,7 @@ const SubscriptionPlansCard = ({
         enableOnlineTopUp={enableOnlineTopUp}
         enableStripeTopUp={enableStripeTopUp}
         enableCreemTopUp={enableCreemTopUp}
+        enableHupijiaoTopUp={enableHupijiaoTopUp}
         purchaseLimitInfo={
           selectedPlan?.plan?.id
             ? {
@@ -766,6 +826,20 @@ const SubscriptionPlansCard = ({
         onPayStripe={payStripe}
         onPayCreem={payCreem}
         onPayEpay={payEpay}
+        onPayHupijiao={payHupijiao}
+      />
+      <AlipayQRModal
+        t={t}
+        visible={qrModal.visible}
+        qrcodeUrl={qrModal.qrcodeUrl}
+        orderId={qrModal.orderId}
+        amount={qrModal.amount}
+        onCheckPaid={handleSubQrCheckPaid}
+        onTimeout={() => {
+          setQrModal((s) => ({ ...s, visible: false }));
+          showError(t('订单已超时，请重新发起支付'));
+        }}
+        onClose={() => setQrModal((s) => ({ ...s, visible: false }))}
       />
     </>
   );

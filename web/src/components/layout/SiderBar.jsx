@@ -36,6 +36,7 @@ const routerMap = {
   token: '/console/token',
   redemption: '/console/redemption',
   topup: '/console/topup',
+  'topup-orders': '/console/topup/orders',
   user: '/console/user',
   subscription: '/console/subscription',
   log: '/console/log',
@@ -131,6 +132,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/topup',
       },
       {
+        text: t('充值订单'),
+        itemKey: 'topup-orders',
+        to: '/topup/orders',
+        alwaysVisible: true, // 订单历史始终可见
+      },
+      {
         text: t('个人设置'),
         itemKey: 'personal',
         to: '/personal',
@@ -139,6 +146,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
 
     // 根据配置过滤项目
     const filteredItems = items.filter((item) => {
+      if (item.alwaysVisible) return true; // 标记为始终可见的项目不过滤
       const configVisible = isModuleVisible('personal', item.itemKey);
       return configVisible;
     });

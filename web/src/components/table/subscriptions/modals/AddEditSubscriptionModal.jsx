@@ -84,6 +84,7 @@ const AddEditSubscriptionModal = ({
     title: '',
     subtitle: '',
     price_amount: 0,
+    price_cny: 0,
     currency: 'USD',
     duration_unit: 'month',
     duration_value: 1,
@@ -108,6 +109,7 @@ const AddEditSubscriptionModal = ({
       title: p.title || '',
       subtitle: p.subtitle || '',
       price_amount: Number(p.price_amount || 0),
+      price_cny: Number(p.price_cny || 0),
       currency: 'USD',
       duration_unit: p.duration_unit || 'month',
       duration_value: Number(p.duration_value || 1),
@@ -152,6 +154,7 @@ const AddEditSubscriptionModal = ({
         plan: {
           ...values,
           price_amount: Number(values.price_amount || 0),
+          price_cny: Number(values.price_cny || 0),
           currency: 'USD',
           duration_value: Number(values.duration_value || 0),
           custom_seconds: Number(values.custom_seconds || 0),
@@ -298,11 +301,24 @@ const AddEditSubscriptionModal = ({
                     <Col span={12}>
                       <Form.InputNumber
                         field='price_amount'
-                        label={t('实付金额')}
+                        label={t('实付金额($)')}
                         required
                         min={0}
                         precision={2}
                         rules={[{ required: true, message: t('请输入金额') }]}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.InputNumber
+                        field='price_cny'
+                        label={t('人民币价格(¥)')}
+                        required
+                        min={0}
+                        precision={2}
+                        rules={[{ required: true, message: t('请输入人民币价格') }]}
+                        extraText={t('支付宝支付的实际金额，0表示不支持支付宝')}
                         style={{ width: '100%' }}
                       />
                     </Col>

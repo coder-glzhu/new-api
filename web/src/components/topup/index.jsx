@@ -39,6 +39,7 @@ import InvitationCard from './InvitationCard';
 import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
+import AlipayQRModal from './modals/AlipayQRModal';
 
 const TopUp = () => {
   const { t } = useTranslation();
@@ -78,6 +79,10 @@ const TopUp = () => {
   const [enableWaffoPancakeTopUp, setEnableWaffoPancakeTopUp] = useState(false);
   const [waffoPancakeMinTopUp, setWaffoPancakeMinTopUp] = useState(1);
 
+  // Hupijiao 虎皮椒相关状态
+  const [enableHupijiaoTopUp, setEnableHupijiaoTopUp] = useState(false);
+  const [hupijiaoMinTopUp, setHupijiaoMinTopUp] = useState(1);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
   const [payWay, setPayWay] = useState('');
@@ -107,6 +112,9 @@ const TopUp = () => {
   // 预设充值额度选项
   const [presetAmounts, setPresetAmounts] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState(null);
+
+  // 支付宝二维码弹窗状态
+  const [qrModal, setQrModal] = useState({ visible: false, qrcodeUrl: '', orderId: '', tradeNo: '', amount: 0 });
 
   // 充值配置信息
   const [topupInfo, setTopupInfo] = useState({
@@ -143,6 +151,9 @@ const TopUp = () => {
     }
     if (typeof payment === 'string' && payment.startsWith('waffo:')) {
       return getWaffoAmount(value);
+    }
+    if (payment === 'hupijiao') {
+      return getHupijiaoAmount(value);
     }
     return getAmount(value);
   };
@@ -207,6 +218,11 @@ const TopUp = () => {
         showError(t('管理员未开启 Waffo 充值！'));
         return;
       }
+    } else if (payment === 'hupijiao') {
+      if (!enableHupijiaoTopUp) {
+        showError(t('管理员未开启虎皮椒支付！'));
+        return;
+      }
     } else {
       if (!enableOnlineTopUp) {
         showError(t('管理员未开启在线充值！'));
@@ -249,6 +265,17 @@ const TopUp = () => {
       setConfirmLoading(true);
       try {
         await waffoTopUp(Number.isFinite(payMethodIndex) ? payMethodIndex : 0);
+      } finally {
+        setOpen(false);
+        setConfirmLoading(false);
+      }
+      return;
+    }
+
+    if (payWay === 'hupijiao') {
+      setConfirmLoading(true);
+      try {
+        await hupijiaoTopUp();
       } finally {
         setOpen(false);
         setConfirmLoading(false);
@@ -474,6 +501,88 @@ const TopUp = () => {
     }
   };
 
+  const hupijiaoTopUp = async () => {
+    const minTopUpValue = Number(hupijiaoMinTopUp || 1);
+    if (topUpCount < minTopUpValue) {
+      showError(t('充值数量不能小于') + minTopUpValue);
+      return;
+    }
+
+    setPaymentLoading(true);
+    try {
+      const res = await API.post('/api/user/hupijiao/pay', {
+        amount: parseFloat(topUpCount),
+      });
+      if (res !== undefined) {
+        const { success, data, message } = res.data;
+        if (success) {
+          if (data.qrcode_url) {
+            setQrModal({
+              visible: true,
+              qrcodeUrl: data.qrcode_url,
+              orderId: data.order_id || '',
+              tradeNo: data.trade_no,
+              amount: amount || 0,
+            });
+          } else if (data.pay_url) {
+            window.open(data.pay_url, '_blank');
+          }
+        } else {
+          showError(message || t('支付请求失败'));
+        }
+      } else {
+        showError(res);
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const getHupijiaoAmount = async (value) => {
+    if (value === undefined) {
+      value = topUpCount;
+    }
+    setAmountLoading(true);
+    try {
+      const res = await API.post('/api/user/hupijiao/amount', {
+        amount: parseInt(value),
+      });
+      if (res !== undefined) {
+        const { success, data } = res.data;
+        if (success) {
+          setAmount(parseFloat(data.amount));
+        } else {
+          setAmount(0);
+        }
+      }
+    } catch (err) {
+      // amount fetch failed silently
+    } finally {
+      setAmountLoading(false);
+    }
+  };
+
+  const handleQrCheckPaid = async () => {
+    const { tradeNo, orderId } = qrModal;
+    try {
+      const res = await API.get(`/api/user/topup/${tradeNo}/status?openid=${orderId}`);
+      const { success, message, data } = res.data;
+      if (success && data?.paid) {
+        showSuccess(message || t('支付成功！配额已到账'));
+        setQrModal((s) => ({ ...s, visible: false }));
+        setTimeout(() => window.location.reload(), 1500);
+        return true;
+      }
+      showError(message || t('订单尚未支付，请完成支付后再试'));
+      return false;
+    } catch {
+      showError(t('查询订单失败'));
+      return false;
+    }
+  };
+
   const getWaffoPancakeAmount = async (value) => {
     if (value === undefined) {
       value = topUpCount;
@@ -656,6 +765,11 @@ const TopUp = () => {
           setWaffoMinTopUp(data.waffo_min_topup || 1);
           setEnableWaffoPancakeTopUp(enableWaffoPancakeTopUp);
           setWaffoPancakeMinTopUp(data.waffo_pancake_min_topup || 1);
+          setEnableHupijiaoTopUp(data.enable_hupijiao_topup || false);
+          const hupijiaoMethod = data.pay_methods?.find(m => m.type === 'hupijiao');
+          if (hupijiaoMethod) {
+            setHupijiaoMinTopUp(parseInt(hupijiaoMethod.min_topup) || 1);
+          }
           setMinTopUp(minTopUpValue);
           setTopUpCount(minTopUpValue);
 
@@ -951,6 +1065,8 @@ const TopUp = () => {
           creemPreTopUp={creemPreTopUp}
           enableWaffoTopUp={enableWaffoTopUp}
           enableWaffoPancakeTopUp={enableWaffoPancakeTopUp}
+          enableHupijiaoTopUp={enableHupijiaoTopUp}
+          hupijiaoMinTopUp={hupijiaoMinTopUp}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}
@@ -996,6 +1112,19 @@ const TopUp = () => {
           handleAffLinkClick={handleAffLinkClick}
         />
       </div>
+      <AlipayQRModal
+        t={t}
+        visible={qrModal.visible}
+        qrcodeUrl={qrModal.qrcodeUrl}
+        orderId={qrModal.orderId}
+        amount={qrModal.amount}
+        onCheckPaid={handleQrCheckPaid}
+        onTimeout={() => {
+          setQrModal((s) => ({ ...s, visible: false }));
+          showError(t('订单已超时，请重新发起支付'));
+        }}
+        onClose={() => setQrModal((s) => ({ ...s, visible: false }))}
+      />
     </div>
   );
 };
