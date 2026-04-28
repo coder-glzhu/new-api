@@ -897,10 +897,10 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 			}
 			// If topup-based upgrade is still active for the same group, don't downgrade.
 			var topupUser User
-			if err := tx.Select("topup_upgrade_group, topup_quota_limit, used_quota").
+			if err := tx.Select("topup_upgrade_group, topup_remaining_quota").
 				Where("id = ?", userId).First(&topupUser).Error; err == nil {
 				if strings.TrimSpace(topupUser.TopupUpgradeGroup) == upgradeGroup &&
-					topupUser.UsedQuota < topupUser.TopupQuotaLimit {
+					topupUser.TopupRemainingQuota > 0 {
 					return nil
 				}
 			}
@@ -922,7 +922,7 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 }
 
 // ExpireDueTopupGroups checks users who were upgraded via topup and downgrades them
-// once their consumed quota (used_quota) has reached or exceeded topup_quota_limit.
+// once their topup remaining quota has reached 0.
 // It also requires no active subscription upgrade to be in effect before downgrading.
 func ExpireDueTopupGroups(limit int) (int, error) {
 	if limit <= 0 {
@@ -930,11 +930,11 @@ func ExpireDueTopupGroups(limit int) (int, error) {
 	}
 	now := GetDBTimestamp()
 
-	// Find candidates: topup-upgraded users whose consumption has reached the water-mark.
+	// Find candidates: topup-upgraded users whose topup quota has been consumed.
 	var userIds []int
 	if err := DB.Model(&User{}).
 		Select("id").
-		Where("topup_upgrade_group <> '' AND used_quota >= topup_quota_limit").
+		Where("topup_upgrade_group <> '' AND topup_remaining_quota <= 0").
 		Limit(limit).
 		Pluck("id", &userIds).Error; err != nil {
 		return 0, err
@@ -948,11 +948,10 @@ func ExpireDueTopupGroups(limit int) (int, error) {
 		cacheGroup := ""
 		err := DB.Transaction(func(tx *gorm.DB) error {
 			var user User
-			if err := tx.Select("id, used_quota, group, topup_quota_limit, topup_upgrade_group, topup_prev_group").
-				Where("id = ?", userId).First(&user).Error; err != nil {
+			if err := tx.Where("id = ?", userId).First(&user).Error; err != nil {
 				return err
 			}
-			if user.TopupUpgradeGroup == "" || user.UsedQuota < user.TopupQuotaLimit {
+			if user.TopupUpgradeGroup == "" || user.TopupRemainingQuota > 0 {
 				return nil
 			}
 
@@ -970,10 +969,10 @@ func ExpireDueTopupGroups(limit int) (int, error) {
 				prevGroup = "default"
 			}
 			if err := tx.Model(&User{}).Where("id = ?", userId).Updates(map[string]interface{}{
-				"group":               prevGroup,
-				"topup_upgrade_group": "",
-				"topup_prev_group":    "",
-				"topup_quota_limit":   0,
+				"group":                 prevGroup,
+				"topup_upgrade_group":   "",
+				"topup_prev_group":      "",
+				"topup_remaining_quota": 0,
 			}).Error; err != nil {
 				return err
 			}

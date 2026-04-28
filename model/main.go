@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
@@ -284,6 +285,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateTopupRemainingQuota(); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -352,6 +356,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := migrateTopupRemainingQuota(); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -369,6 +376,75 @@ func migrateLOGDB() error {
 	var err error
 	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
 		return err
+	}
+	return nil
+}
+
+// migrateTopupRemainingQuota migrates topup water-mark data from the legacy
+// topup_quota_limit column to topup_remaining_quota.
+func migrateTopupRemainingQuota() error {
+	if !DB.Migrator().HasTable(&User{}) {
+		return nil
+	}
+	if !DB.Migrator().HasColumn(&User{}, "topup_remaining_quota") {
+		if err := DB.Migrator().AddColumn(&User{}, "TopupRemainingQuota"); err != nil {
+			return fmt.Errorf("failed to add users.topup_remaining_quota: %w", err)
+		}
+	}
+
+	legacyColumn := "topup_quota_limit"
+	if !DB.Migrator().HasColumn(&User{}, legacyColumn) {
+		return nil
+	}
+
+	backfillSQL := `
+UPDATE users
+SET topup_remaining_quota = CASE
+	WHEN quota > 0 THEN quota
+	ELSE 0
+END
+WHERE topup_upgrade_group <> '' AND topup_remaining_quota = 0`
+	if err := DB.Exec(backfillSQL).Error; err != nil {
+		return fmt.Errorf("failed to backfill users.topup_remaining_quota: %w", err)
+	}
+	if err := backfillManualVipUsersForTopup(); err != nil {
+		return err
+	}
+
+	if err := DB.Migrator().DropColumn(&User{}, legacyColumn); err != nil {
+		common.SysLog(fmt.Sprintf("warning: failed to drop users.%s, keep legacy column for now: %v", legacyColumn, err))
+		return nil
+	}
+	common.SysLog("migrated users.topup_quota_limit to users.topup_remaining_quota")
+	return nil
+}
+
+// backfillManualVipUsersForTopup converts admin-manual VIP users to topup tracking
+// while keeping subscription-upgraded VIP users untouched.
+func backfillManualVipUsersForTopup() error {
+	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
+	if upgradeGroup == "" {
+		return nil
+	}
+	now := GetDBTimestamp()
+	sql := fmt.Sprintf(`
+UPDATE users
+SET
+	topup_upgrade_group = ?,
+	topup_prev_group = CASE WHEN topup_prev_group = '' THEN 'default' ELSE topup_prev_group END,
+	topup_remaining_quota = CASE WHEN quota > 0 THEN quota ELSE 0 END
+WHERE %s = ?
+	AND topup_upgrade_group = ''
+	AND topup_remaining_quota = 0
+	AND NOT EXISTS (
+		SELECT 1 FROM user_subscriptions us
+		WHERE us.user_id = users.id
+		  AND us.status = 'active'
+		  AND us.end_time > ?
+		  AND us.upgrade_group <> ''
+	)`, commonGroupCol)
+	if err := DB.Exec(sql, upgradeGroup, upgradeGroup, now).Error; err != nil {
+		return fmt.Errorf("failed to backfill admin-manual VIP users for topup: %w", err)
 	}
 	return nil
 }

@@ -726,8 +726,8 @@ func ExpirePendingTopUps(expireTimestamp int64, limit int) (int, error) {
 }
 
 // applyTopupGroupUpgradeTx upgrades the user's group within a transaction when a topup completes.
-// It increments topup_quota_limit by quotaToAdd (using the current used_quota as baseline on first upgrade)
-// and sets the group to setting.TopupUpgradeGroup if configured.
+// It increments topup_remaining_quota by quotaToAdd and sets the group to
+// setting.TopupUpgradeGroup if configured.
 // Must be called inside a DB transaction.
 func applyTopupGroupUpgradeTx(tx *gorm.DB, userId int, quotaToAdd int) error {
 	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
@@ -736,13 +736,12 @@ func applyTopupGroupUpgradeTx(tx *gorm.DB, userId int, quotaToAdd int) error {
 	}
 
 	var user User
-	if err := tx.Select("id, used_quota, quota, group, topup_quota_limit, topup_upgrade_group, topup_prev_group").
-		Where("id = ?", userId).First(&user).Error; err != nil {
+	if err := tx.Where("id = ?", userId).First(&user).Error; err != nil {
 		return err
 	}
 
 	updates := map[string]interface{}{
-		"topup_quota_limit": gorm.Expr("topup_quota_limit + ?", quotaToAdd),
+		"topup_remaining_quota": gorm.Expr("topup_remaining_quota + ?", quotaToAdd),
 	}
 
 	if user.TopupUpgradeGroup != upgradeGroup {
