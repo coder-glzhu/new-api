@@ -49,9 +49,12 @@ type User struct {
 	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
 	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	CreatedAt        int64          `json:"created_at" gorm:"autoCreateTime;column:created_at"`
-	LastLoginAt      int64          `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	StripeCustomer      string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	CreatedAt           int64          `json:"created_at" gorm:"autoCreateTime;column:created_at"`
+	LastLoginAt         int64          `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	TopupQuotaLimit     int            `json:"topup_quota_limit" gorm:"type:bigint;default:0;column:topup_quota_limit"`
+	TopupUpgradeGroup   string         `json:"topup_upgrade_group" gorm:"type:varchar(64);default:'';column:topup_upgrade_group;index"`
+	TopupPrevGroup      string         `json:"topup_prev_group" gorm:"type:varchar(64);default:'';column:topup_prev_group"`
 }
 
 func (user *User) ToBaseUser() *UserBase {

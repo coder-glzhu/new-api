@@ -68,6 +68,20 @@ func runSubscriptionQuotaResetOnce() {
 		}
 	}
 	for {
+		n, err := model.ExpireDueTopupGroups(subscriptionResetBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("topup group expire task failed: %v", err))
+			break
+		}
+		if n == 0 {
+			break
+		}
+		totalExpired += n
+		if n < subscriptionResetBatchSize {
+			break
+		}
+	}
+	for {
 		n, err := model.ResetDueSubscriptions(subscriptionResetBatchSize)
 		if err != nil {
 			logger.LogWarn(ctx, fmt.Sprintf("subscription quota reset task failed: %v", err))

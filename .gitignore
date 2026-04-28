@@ -5,6 +5,8 @@
 upload
 *.exe
 *.db
+*.db.bak
+start-local.sh
 build
 *.db-journal
 logs

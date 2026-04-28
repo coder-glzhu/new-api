@@ -3,9 +3,11 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -144,6 +146,10 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		quota = topUp.Money * common.QuotaPerUnit
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
 		if err != nil {
+			return err
+		}
+
+		if err := applyTopupGroupUpgradeTx(tx, topUp.UserId, int(quota)); err != nil {
 			return err
 		}
 
@@ -376,6 +382,10 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return err
 		}
 
+		if err := applyTopupGroupUpgradeTx(tx, topUp.UserId, quotaToAdd); err != nil {
+			return err
+		}
+
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		paymentMethod = topUp.PaymentMethod
@@ -452,6 +462,10 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 
+		if err := applyTopupGroupUpgradeTx(tx, topUp.UserId, int(quota)); err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -513,6 +527,10 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 			return err
 		}
 
+		if err := applyTopupGroupUpgradeTx(tx, topUp.UserId, quotaToAdd); err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -571,6 +589,10 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 		}
 
 		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+
+		if err := applyTopupGroupUpgradeTx(tx, topUp.UserId, quotaToAdd); err != nil {
 			return err
 		}
 
@@ -657,6 +679,10 @@ func RechargeByHupijiao(tradeNo string, amount float64) error {
 			return fmt.Errorf("增加配额失败: %w", err)
 		}
 
+		if err := applyTopupGroupUpgradeTx(tx, topUp.UserId, quotaToAdd); err != nil {
+			return fmt.Errorf("升级用户分组失败: %w", err)
+		}
+
 		return nil
 	})
 
@@ -697,4 +723,46 @@ func ExpirePendingTopUps(expireTimestamp int64, limit int) (int, error) {
 	}
 
 	return int(result.RowsAffected), nil
+}
+
+// applyTopupGroupUpgradeTx upgrades the user's group within a transaction when a topup completes.
+// It increments topup_quota_limit by quotaToAdd (using the current used_quota as baseline on first upgrade)
+// and sets the group to setting.TopupUpgradeGroup if configured.
+// Must be called inside a DB transaction.
+func applyTopupGroupUpgradeTx(tx *gorm.DB, userId int, quotaToAdd int) error {
+	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
+	if upgradeGroup == "" || quotaToAdd <= 0 {
+		return nil
+	}
+
+	var user User
+	if err := tx.Select("id, used_quota, quota, group, topup_quota_limit, topup_upgrade_group, topup_prev_group").
+		Where("id = ?", userId).First(&user).Error; err != nil {
+		return err
+	}
+
+	updates := map[string]interface{}{
+		"topup_quota_limit": gorm.Expr("topup_quota_limit + ?", quotaToAdd),
+	}
+
+	if user.TopupUpgradeGroup != upgradeGroup {
+		updates["topup_upgrade_group"] = upgradeGroup
+		if user.Group != upgradeGroup {
+			updates["topup_prev_group"] = user.Group
+			updates["group"] = upgradeGroup
+		}
+	}
+
+	return tx.Model(&User{}).Where("id = ?", userId).Updates(updates).Error
+}
+
+// ApplyTopupGroupUpgrade is the non-transactional version for callers that manage their own DB writes.
+func ApplyTopupGroupUpgrade(userId int, quotaToAdd int) error {
+	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
+	if upgradeGroup == "" || quotaToAdd <= 0 {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return applyTopupGroupUpgradeTx(tx, userId, quotaToAdd)
+	})
 }

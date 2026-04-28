@@ -895,6 +895,15 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 			if currentGroup != upgradeGroup || currentGroup == prevGroup {
 				return nil
 			}
+			// If topup-based upgrade is still active for the same group, don't downgrade.
+			var topupUser User
+			if err := tx.Select("topup_upgrade_group, topup_quota_limit, used_quota").
+				Where("id = ?", userId).First(&topupUser).Error; err == nil {
+				if strings.TrimSpace(topupUser.TopupUpgradeGroup) == upgradeGroup &&
+					topupUser.UsedQuota < topupUser.TopupQuotaLimit {
+					return nil
+				}
+			}
 			if err := tx.Model(&User{}).Where("id = ?", userId).
 				Update("group", prevGroup).Error; err != nil {
 				return err
@@ -910,6 +919,76 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 		}
 	}
 	return expiredCount, nil
+}
+
+// ExpireDueTopupGroups checks users who were upgraded via topup and downgrades them
+// once their consumed quota (used_quota) has reached or exceeded topup_quota_limit.
+// It also requires no active subscription upgrade to be in effect before downgrading.
+func ExpireDueTopupGroups(limit int) (int, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	now := GetDBTimestamp()
+
+	// Find candidates: topup-upgraded users whose consumption has reached the water-mark.
+	var userIds []int
+	if err := DB.Model(&User{}).
+		Select("id").
+		Where("topup_upgrade_group <> '' AND used_quota >= topup_quota_limit").
+		Limit(limit).
+		Pluck("id", &userIds).Error; err != nil {
+		return 0, err
+	}
+	if len(userIds) == 0 {
+		return 0, nil
+	}
+
+	downgradedCount := 0
+	for _, userId := range userIds {
+		cacheGroup := ""
+		err := DB.Transaction(func(tx *gorm.DB) error {
+			var user User
+			if err := tx.Select("id, used_quota, group, topup_quota_limit, topup_upgrade_group, topup_prev_group").
+				Where("id = ?", userId).First(&user).Error; err != nil {
+				return err
+			}
+			if user.TopupUpgradeGroup == "" || user.UsedQuota < user.TopupQuotaLimit {
+				return nil
+			}
+
+			// Keep VIP if there's an active subscription upgrade — topup fields stay intact.
+			var activeSub UserSubscription
+			activeQuery := tx.Where("user_id = ? AND status = ? AND end_time > ? AND upgrade_group <> ''",
+				userId, "active", now).Limit(1).Find(&activeSub)
+			if activeQuery.Error == nil && activeQuery.RowsAffected > 0 {
+				return nil
+			}
+
+			// Downgrade to the group the user was in before the topup upgrade.
+			prevGroup := strings.TrimSpace(user.TopupPrevGroup)
+			if prevGroup == "" {
+				prevGroup = "default"
+			}
+			if err := tx.Model(&User{}).Where("id = ?", userId).Updates(map[string]interface{}{
+				"group":               prevGroup,
+				"topup_upgrade_group": "",
+				"topup_prev_group":    "",
+				"topup_quota_limit":   0,
+			}).Error; err != nil {
+				return err
+			}
+			cacheGroup = prevGroup
+			downgradedCount++
+			return nil
+		})
+		if err != nil {
+			return downgradedCount, err
+		}
+		if cacheGroup != "" {
+			_ = UpdateUserGroupCache(userId, cacheGroup)
+		}
+	}
+	return downgradedCount, nil
 }
 
 // SubscriptionPreConsumeRecord stores idempotent pre-consume operations per request.
