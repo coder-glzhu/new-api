@@ -5,19 +5,27 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$ROOT_DIR/web"
 LOG_DIR="$ROOT_DIR/logs"
 
+export PATH="$HOME/.bun/bin:$PATH"
+
 BACKEND_PORT="${PORT:-3000}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${FRONTEND_PORT:-5174}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-5432}"
-DB_USER="${DB_USER:-root}"
-DB_PASSWORD="${DB_PASSWORD:-123456}"
+DB_USER="${DB_USER:-$(whoami)}"
+DB_PASSWORD="${DB_PASSWORD:-}"
 DB_NAME="${DB_NAME:-new-api}"
 DB_CONTAINER="${DB_CONTAINER:-new-api-dev-postgres}"
 
 export PORT="$BACKEND_PORT"
 export VITE_DEV_API_TARGET="${VITE_DEV_API_TARGET:-http://localhost:${BACKEND_PORT}}"
-export SQL_DSN="${SQL_DSN:-postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}}"
+if [ -z "${SQL_DSN:-}" ]; then
+  if [ -n "$DB_PASSWORD" ]; then
+    export SQL_DSN="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable"
+  else
+    export SQL_DSN="postgresql://${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable"
+  fi
+fi
 export REDIS_CONN_STRING="${REDIS_CONN_STRING:-}"
 export TZ="${TZ:-Asia/Shanghai}"
 export GOCACHE="${GOCACHE:-/tmp/go-build-cache}"
