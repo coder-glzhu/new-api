@@ -93,7 +93,7 @@ func RequestHupijiaoPay(c *gin.Context) {
 	if payMoney < float64(setting.HupijiaoMinTopUp) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": fmt.Sprintf("最低充值金额为 %d 元", setting.HupijiaoMinTopUp),
+			"message": fmt.Sprintf("实付金额 %.2f 元低于最低充值金额 %d 元，请增加充值数量后重试", payMoney, setting.HupijiaoMinTopUp),
 		})
 		return
 	}

@@ -512,7 +512,7 @@ const TopUp = () => {
     try {
       const res = await API.post('/api/user/hupijiao/pay', {
         amount: parseFloat(topUpCount),
-      });
+      }, { skipErrorHandler: true });
       if (res !== undefined) {
         const { success, data, message } = res.data;
         if (success) {
@@ -534,7 +534,8 @@ const TopUp = () => {
         showError(res);
       }
     } catch (e) {
-      showError(t('支付请求失败'));
+      const msg = e.response?.data?.message;
+      showError(msg || t('支付请求失败'));
     } finally {
       setPaymentLoading(false);
     }
