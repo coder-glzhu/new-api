@@ -726,12 +726,18 @@ func ExpirePendingTopUps(expireTimestamp int64, limit int) (int, error) {
 }
 
 // applyTopupGroupUpgradeTx upgrades the user's group within a transaction when a topup completes.
-// It increments topup_remaining_quota by quotaToAdd and sets the group to
-// setting.TopupUpgradeGroup if configured.
+// It increments topup_remaining_quota by quotaToAdd and sets the group accordingly.
 // Must be called inside a DB transaction.
+//
+// [fork 2026-04-29] 上游约定 TopupUpgradeGroup 为空表示关闭充值升组；我们线上未在 options 配置该项时，
+// 也会走到充值成功路径但不升 VIP。此处在未配置时使用分组 key "vip"（与 UserUsableGroups 中 VIP 一致），
+// 避免依赖后台开关即可充值自动进 VIP 并累计 topup_remaining_quota 水位。
 func applyTopupGroupUpgradeTx(tx *gorm.DB, userId int, quotaToAdd int) error {
 	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
-	if upgradeGroup == "" || quotaToAdd <= 0 {
+	if upgradeGroup == "" {
+		upgradeGroup = "vip"
+	}
+	if quotaToAdd <= 0 {
 		return nil
 	}
 
@@ -756,9 +762,11 @@ func applyTopupGroupUpgradeTx(tx *gorm.DB, userId int, quotaToAdd int) error {
 }
 
 // ApplyTopupGroupUpgrade is the non-transactional version for callers that manage their own DB writes.
+//
+// [fork 2026-04-29] 不在此处判断 TopupUpgradeGroup 是否为空：applyTopupGroupUpgradeTx 内已对空串默认 "vip"，
+// 若此处仍「空则 return」，事务根本不会执行，充值升组仍会被静默跳过。
 func ApplyTopupGroupUpgrade(userId int, quotaToAdd int) error {
-	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
-	if upgradeGroup == "" || quotaToAdd <= 0 {
+	if quotaToAdd <= 0 {
 		return nil
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
