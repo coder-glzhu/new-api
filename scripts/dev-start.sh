@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WEB_DIR="$ROOT_DIR/web"
+WEB_DIR="$ROOT_DIR/web/default"
 LOG_DIR="$ROOT_DIR/logs"
 
 export PATH="$HOME/.bun/bin:$PATH"
