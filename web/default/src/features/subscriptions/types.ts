@@ -9,6 +9,7 @@ export const subscriptionPlanSchema = z.object({
   title: z.string(),
   subtitle: z.string().optional(),
   price_amount: z.number(),
+  price_cny: z.number().optional(),
   currency: z.string().default('USD'),
   duration_unit: z.enum(['year', 'month', 'day', 'hour', 'custom']),
   duration_value: z.number(),
@@ -28,6 +29,7 @@ export type SubscriptionPlan = z.infer<typeof subscriptionPlanSchema>
 
 export interface PlanRecord {
   plan: SubscriptionPlan
+  total_amount_usd?: number
 }
 
 // ============================================================================
@@ -78,6 +80,10 @@ export interface SubscriptionPayResponse {
   data?: {
     pay_link?: string
     checkout_url?: string
+    order_id?: string
+    qrcode_url?: string
+    pay_url?: string
+    trade_no?: string
   }
   url?: string
 }

@@ -113,6 +113,7 @@ export function RechargeFormCard({
   const hasConfigurableTopup =
     topupInfo?.enable_online_topup ||
     topupInfo?.enable_stripe_topup ||
+    topupInfo?.enable_hupijiao_topup ||
     enableWaffoTopup ||
     enableWaffoPancakeTopup
   const hasAnyTopup = hasConfigurableTopup || enableCreemTopup
@@ -185,7 +186,7 @@ export function RechargeFormCard({
               className='w-full gap-2 sm:w-auto'
             >
               <Receipt className='h-4 w-4' />
-              {t('Order History')}
+              我的订单
             </Button>
         ) : null
       }

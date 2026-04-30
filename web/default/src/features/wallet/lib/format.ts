@@ -1,4 +1,4 @@
-import { formatLocalCurrencyAmount } from '@/lib/currency'
+import { formatCnyCurrencyAmount } from '@/lib/currency'
 import { DEFAULT_DISCOUNT_RATE } from '../constants'
 
 // ============================================================================
@@ -30,13 +30,12 @@ export function formatQuotaShort(quota: number): string {
 }
 
 /**
- * Format currency amount that is already in local currency.
- * This is used for payment amounts that have been calculated via priceRatio.
+ * Format RMB payment amount that has already been calculated via priceRatio.
  */
 export function formatCurrency(amount: number | string): string {
   const numeric =
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
-  return formatLocalCurrencyAmount(Number.isFinite(numeric) ? numeric : null, {
+  return formatCnyCurrencyAmount(Number.isFinite(numeric) ? numeric : null, {
     digitsLarge: 2,
     digitsSmall: 2,
     abbreviate: false,

@@ -33,6 +33,15 @@ const INTEGRATIONS_SECTIONS = [
           CreemWebhookSecret: settings.CreemWebhookSecret,
           CreemTestMode: settings.CreemTestMode,
           CreemProducts: settings.CreemProducts,
+          HupijiaoEnabled: settings.HupijiaoEnabled ?? false,
+          HupijiaoAppId: settings.HupijiaoAppId ?? '',
+          HupijiaoAppSecret: settings.HupijiaoAppSecret ?? '',
+          HupijiaoApiUrl:
+            settings.HupijiaoApiUrl ??
+            'https://api.xunhupay.com/payment/do.html',
+          HupijiaoNotifyUrl: settings.HupijiaoNotifyUrl ?? '',
+          HupijiaoReturnUrl: settings.HupijiaoReturnUrl ?? '',
+          HupijiaoMinTopUp: settings.HupijiaoMinTopUp ?? 1,
         }}
         waffoDefaultValues={{
           WaffoEnabled: settings.WaffoEnabled ?? false,

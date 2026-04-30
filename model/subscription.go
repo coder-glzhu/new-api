@@ -32,6 +32,12 @@ const (
 	SubscriptionResetCustom  = "custom"
 )
 
+const (
+	SubscriptionPaymentMethodAlipay     = "alipay"
+	SubscriptionPaymentMethodHupijiao   = "hupijiao"
+	SubscriptionPaymentProviderHupijiao = "hupijiao"
+)
+
 var (
 	ErrSubscriptionOrderNotFound      = errors.New("subscription order not found")
 	ErrSubscriptionOrderStatusInvalid = errors.New("subscription order status invalid")
@@ -589,14 +595,15 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 	if err := tx.Where("trade_no = ?", order.TradeNo).First(&topup).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			topup = TopUp{
-				UserId:        order.UserId,
-				Amount:        0,
-				Money:         order.Money,
-				TradeNo:       order.TradeNo,
-				PaymentMethod: order.PaymentMethod,
-				CreateTime:    order.CreateTime,
-				CompleteTime:  now,
-				Status:        common.TopUpStatusSuccess,
+				UserId:          order.UserId,
+				Amount:          0,
+				Money:           order.Money,
+				TradeNo:         order.TradeNo,
+				PaymentMethod:   order.PaymentMethod,
+				PaymentProvider: order.PaymentProvider,
+				CreateTime:      order.CreateTime,
+				CompleteTime:    now,
+				Status:          common.TopUpStatusSuccess,
 			}
 			return tx.Create(&topup).Error
 		}
@@ -606,6 +613,11 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 	if topup.PaymentMethod == "" {
 		topup.PaymentMethod = order.PaymentMethod
 	} else if topup.PaymentMethod != order.PaymentMethod {
+		return ErrPaymentMethodMismatch
+	}
+	if topup.PaymentProvider == "" {
+		topup.PaymentProvider = order.PaymentProvider
+	} else if order.PaymentProvider != "" && topup.PaymentProvider != order.PaymentProvider {
 		return ErrPaymentMethodMismatch
 	}
 	if topup.CreateTime == 0 {
@@ -636,6 +648,31 @@ func ExpireSubscriptionOrder(tradeNo string, expectedPaymentProvider string) err
 			return nil
 		}
 		order.Status = common.TopUpStatusExpired
+		order.CompleteTime = common.GetTimestamp()
+		return tx.Save(&order).Error
+	})
+}
+
+func CancelSubscriptionOrder(tradeNo string, expectedPaymentProvider string) error {
+	if tradeNo == "" {
+		return errors.New("tradeNo is empty")
+	}
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var order SubscriptionOrder
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(&order).Error; err != nil {
+			return ErrSubscriptionOrderNotFound
+		}
+		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
+			return ErrPaymentMethodMismatch
+		}
+		if order.Status != common.TopUpStatusPending {
+			return nil
+		}
+		order.Status = common.TopUpStatusCanceled
 		order.CompleteTime = common.GetTimestamp()
 		return tx.Save(&order).Error
 	})
@@ -1203,4 +1240,109 @@ func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error
 		sub.AmountUsed = newUsed
 		return tx.Save(&sub).Error
 	})
+}
+
+// CompleteHupijiaoSubscriptionOrder handles Hupijiao subscription payment callback
+func CompleteHupijiaoSubscriptionOrder(tradeNo string, amount float64, providerPayload string) error {
+	if tradeNo == "" {
+		return errors.New("未提供订单号")
+	}
+
+	var order SubscriptionOrder
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 锁定订单记录
+		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(&order).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrSubscriptionOrderNotFound
+			}
+			return fmt.Errorf("查询订单失败: %w", err)
+		}
+
+		// 验证支付方式
+		if order.PaymentProvider != SubscriptionPaymentProviderHupijiao {
+			return fmt.Errorf("支付方式不匹配: %s", order.PaymentProvider)
+		}
+
+		// 幂等性检查
+		if order.Status == common.TopUpStatusSuccess {
+			return nil // 已成功，直接返回
+		}
+
+		// 验证订单状态
+		if order.Status != common.TopUpStatusPending {
+			return ErrSubscriptionOrderStatusInvalid
+		}
+
+		// 金额验证（允许0.01元误差）
+		if order.Money < amount-0.01 || order.Money > amount+0.01 {
+			return fmt.Errorf("金额不匹配: 期望%.2f, 实际%.2f", order.Money, amount)
+		}
+
+		// 更新订单状态
+		order.Status = common.TopUpStatusSuccess
+		order.CompleteTime = common.GetTimestamp()
+		order.ProviderPayload = providerPayload
+
+		if err := tx.Save(&order).Error; err != nil {
+			return fmt.Errorf("更新订单失败: %w", err)
+		}
+
+		// 获取套餐信息
+		plan, err := GetSubscriptionPlanById(order.PlanId)
+		if err != nil {
+			return fmt.Errorf("套餐不存在: %w", err)
+		}
+
+		// 创建用户订阅
+		_, err = CreateUserSubscriptionFromPlanTx(tx, order.UserId, plan, "hupijiao")
+		if err != nil {
+			return fmt.Errorf("创建订阅失败: %w", err)
+		}
+
+		if err := upsertSubscriptionTopUpTx(tx, &order); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		common.SysError("hupijiao subscription failed: " + err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// CountUserPendingSubscriptionOrders 统计用户指定支付方式的待支付订阅订单数量（防刷单）
+func CountUserPendingSubscriptionOrders(userId int, paymentProvider string) (int64, error) {
+	var count int64
+	err := DB.Model(&SubscriptionOrder{}).
+		Where("user_id = ? AND payment_provider = ? AND status = ?", userId, paymentProvider, common.TopUpStatusPending).
+		Count(&count).Error
+	return count, err
+}
+
+// ExpirePendingSubscriptionOrders 批量取消过期的待支付订阅订单
+// expireTimestamp: 创建时间早于此时间戳的订单将被取消
+// limit: 每次批量处理的数量
+// 返回实际取消的订单数量
+func ExpirePendingSubscriptionOrders(expireTimestamp int64, limit int) (int, error) {
+	result := DB.Model(&SubscriptionOrder{}).
+		Where("status = ? AND create_time < ?", common.TopUpStatusPending, expireTimestamp).
+		Limit(limit).
+		Update("status", common.TopUpStatusExpired)
+
+	if result.Error != nil {
+		return 0, result.Error
+	}
+
+	return int(result.RowsAffected), nil
 }

@@ -52,13 +52,20 @@ function parsePaymentMethods(
         name: typeof item.name === 'string' ? item.name : '',
         type,
         color: typeof item.color === 'string' ? item.color : undefined,
+        icon: typeof item.icon === 'string' ? item.icon : undefined,
         min_topup:
           type === 'stripe' && normalizedMinTopup <= 0
             ? stripeMinTopup
             : normalizedMinTopup,
       }
     })
-    .filter((item) => item.name && item.type && item.type !== 'waffo')
+    .filter(
+      (item) =>
+        item.name &&
+        item.type &&
+        item.type !== 'waffo' &&
+        item.type !== 'hupijiao'
+    )
 }
 
 function parseWaffoPayMethods(data: unknown): WaffoPayMethod[] {
@@ -160,12 +167,26 @@ export function useTopupInfo() {
         return
       }
 
+      const parsedPayMethods = parsePaymentMethods(
+        response.data.pay_methods,
+        response.data.stripe_min_topup
+      )
+      const hupijiaoMinTopup = Number(response.data.hupijiao_min_topup) || 0
+      const payMethods =
+        response.data.enable_hupijiao_topup && hupijiaoMinTopup > 0
+          ? parsedPayMethods.map((method) =>
+              method.type === 'alipay'
+                ? {
+                    ...method,
+                    min_topup: Math.max(method.min_topup || 0, hupijiaoMinTopup),
+                  }
+                : method
+            )
+          : parsedPayMethods
+
       const processedData: TopupInfo = {
         ...response.data,
-        pay_methods: parsePaymentMethods(
-          response.data.pay_methods,
-          response.data.stripe_min_topup
-        ),
+        pay_methods: payMethods,
         amount_options: parseAmountOptions(response.data.amount_options),
         discount: parseDiscountMap(response.data.discount),
         creem_products: parseCreemProducts(response.data.creem_products),

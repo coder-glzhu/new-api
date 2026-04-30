@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Crown, RefreshCw, Sparkles, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { formatCnyCurrencyAmount } from '@/lib/currency'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useStatus } from '@/hooks/use-status'
@@ -50,9 +51,17 @@ interface SubscriptionPlansCardProps {
   onAvailabilityChange?: (available: boolean) => void
 }
 
-function getEpayMethods(payMethods: PaymentMethod[] = []): PaymentMethod[] {
+function getEpayMethods(
+  payMethods: PaymentMethod[] = [],
+  routeAlipayThroughHupijiao = false
+): PaymentMethod[] {
   return payMethods.filter(
-    (m) => m?.type && m.type !== 'stripe' && m.type !== 'creem'
+    (m) =>
+      m?.type &&
+      m.type !== 'stripe' &&
+      m.type !== 'creem' &&
+      m.type !== 'hupijiao' &&
+      (!routeAlipayThroughHupijiao || m.type !== 'alipay')
   )
 }
 
@@ -79,11 +88,17 @@ export function SubscriptionPlansCard({
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
 
   const enableStripe = !!status?.enable_stripe_topup
-  const enableCreem = !!topupInfo?.enable_creem_topup
+  const enableCreem = !!props.topupInfo?.enable_creem_topup
+  const alipayMethod = useMemo(
+    () => props.topupInfo?.pay_methods?.find((m) => m.type === 'alipay'),
+    [props.topupInfo?.pay_methods]
+  )
+  const enableHupijiao =
+    !!props.topupInfo?.enable_hupijiao_topup && !!alipayMethod
   const enableOnlineTopUp = !!status?.enable_online_topup
   const epayMethods = useMemo(
-    () => getEpayMethods(topupInfo?.pay_methods),
-    [topupInfo?.pay_methods]
+    () => getEpayMethods(props.topupInfo?.pay_methods, enableHupijiao),
+    [props.topupInfo?.pay_methods, enableHupijiao]
   )
 
   const fetchPlans = useCallback(async () => {
@@ -454,7 +469,16 @@ export function SubscriptionPlansCard({
                 const plan = p?.plan
                 if (!plan) return null
                 const totalAmount = Number(plan.total_amount || 0)
+                const priceCNY = Number(plan.price_cny || 0)
                 const price = Number(plan.price_amount || 0).toFixed(2)
+                const displayPrice =
+                  enableHupijiao && priceCNY > 0
+                    ? formatCnyCurrencyAmount(priceCNY, {
+                        digitsLarge: 2,
+                        digitsSmall: 2,
+                        abbreviate: false,
+                      })
+                    : `$${price}`
                 const isPopular = index === 0 && plans.length > 1
                 const limit = Number(plan.max_purchase_per_user || 0)
                 const count = planPurchaseCountMap.get(plan.id) || 0
@@ -508,7 +532,7 @@ export function SubscriptionPlansCard({
 
                       <div className='py-2'>
                         <span className='text-primary text-2xl font-bold'>
-                          ${price}
+                          {displayPrice}
                         </span>
                       </div>
 
@@ -578,6 +602,8 @@ export function SubscriptionPlansCard({
         plan={selectedPlan}
         enableStripe={enableStripe}
         enableCreem={enableCreem}
+        enableHupijiao={enableHupijiao}
+        hupijiaoPaymentMethodName={alipayMethod?.name}
         enableOnlineTopUp={enableOnlineTopUp}
         epayMethods={epayMethods}
         purchaseLimit={

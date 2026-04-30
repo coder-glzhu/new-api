@@ -34,6 +34,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   personal: {
     enabled: true,
     topup: true,
+    orders: true,
     personal: true,
   },
   admin: {
@@ -87,6 +88,7 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/usage-logs/drawing': { section: 'console', module: 'midjourney' },
   '/usage-logs/task': { section: 'console', module: 'task' },
   '/wallet': { section: 'personal', module: 'topup' },
+  '/orders': { section: 'personal', module: 'orders' },
   '/profile': { section: 'personal', module: 'personal' },
   '/channels': { section: 'admin', module: 'channel' },
   '/models': { section: 'admin', module: 'models' },
@@ -112,7 +114,29 @@ function parseSidebarConfig(
 
   try {
     const parsed = JSON.parse(value) as SidebarModulesAdminConfig
-    return mergeWithDefaultSidebarModules(parsed)
+    // Ensure known sections and newly added modules exist for legacy configs.
+    if (!parsed.chat) {
+      parsed.chat = { enabled: true, playground: true, chat: true }
+    } else {
+      if (parsed.chat.enabled === undefined) parsed.chat.enabled = true
+      if (parsed.chat.playground === undefined) parsed.chat.playground = true
+      if (parsed.chat.chat === undefined) parsed.chat.chat = true
+    }
+    if (!parsed.personal) {
+      parsed.personal = {
+        enabled: true,
+        topup: true,
+        orders: true,
+        personal: true,
+      }
+    } else {
+      if (parsed.personal.enabled === undefined) parsed.personal.enabled = true
+      if (parsed.personal.topup === undefined) parsed.personal.topup = true
+      if (parsed.personal.orders === undefined) parsed.personal.orders = true
+      if (parsed.personal.personal === undefined)
+        parsed.personal.personal = true
+    }
+    return parsed
   } catch {
     // eslint-disable-next-line no-console
     console.error('Failed to parse sidebar modules configuration')

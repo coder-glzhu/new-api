@@ -172,6 +172,13 @@ export type IntegrationSettings = {
   CreemWebhookSecret: string
   CreemTestMode: boolean
   CreemProducts: string
+  HupijiaoEnabled: boolean
+  HupijiaoAppId: string
+  HupijiaoAppSecret: string
+  HupijiaoApiUrl: string
+  HupijiaoNotifyUrl: string
+  HupijiaoReturnUrl: string
+  HupijiaoMinTopUp: number
   WaffoEnabled: boolean
   WaffoApiKey: string
   WaffoPrivateKey: string

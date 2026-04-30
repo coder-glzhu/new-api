@@ -96,6 +96,13 @@ export function SidebarModulesCard() {
           description: t('Balance and top-up management'),
         },
         {
+          key: 'orders',
+          title: '我的订单',
+          description: t(
+            'View your topup transaction records and payment history'
+          ),
+        },
+        {
           key: 'personal',
           title: t('Personal Settings'),
           description: t('Personal info settings'),

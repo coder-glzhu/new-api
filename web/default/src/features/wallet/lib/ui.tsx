@@ -95,6 +95,13 @@ export function getPaymentIcon(
           style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.CREEM] }}
         />
       )
+    case PAYMENT_TYPES.HUPIJIAO:
+      return (
+        <SiAlipay
+          className={className}
+          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.HUPIJIAO] }}
+        />
+      )
     case PAYMENT_TYPES.WAFFO:
       return (
         <CreditCard

@@ -1,5 +1,7 @@
 {
-  "Go to Settings": "Go to Settings",
-  "Failed to adjust quota": "Failed to adjust quota",
-  "Select an operation mode and enter the amount": "Select an operation mode and enter the amount"
+  "Enable Alipay checkout for wallet and subscriptions": "Enable Alipay checkout for wallet and subscriptions",
+  "Leave blank to use the default webhook URL": "Leave blank to use the default webhook URL",
+  "Leave callback URLs blank to let the backend use the server address when supported.": "Leave callback URLs blank to let the backend use the server address when supported.",
+  "Scan the QR code or open the payment link to complete payment": "Scan the QR code or open the payment link to complete payment",
+  "Set to 0 to disable Alipay for this plan": "Set to 0 to disable Alipay for this plan"
 }

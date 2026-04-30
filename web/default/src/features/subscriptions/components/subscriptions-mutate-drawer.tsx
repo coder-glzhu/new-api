@@ -505,6 +505,30 @@ export function SubscriptionsMutateDrawer({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name='price_cny'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>人民币价格</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type='number'
+                        min={0.01}
+                        step='0.01'
+                        placeholder='例如 9.90'
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>创建套餐时必须填写</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           </form>
         </Form>
