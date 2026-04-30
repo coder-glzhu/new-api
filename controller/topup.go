@@ -90,25 +90,22 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
-	// 如果启用了虎皮椒支付，添加到支付方法列表
 	enableHupijiao := isHupijiaoTopUpEnabled()
 	if enableHupijiao {
-		hasHupijiao := false
+		hasAlipay := false
 		for _, method := range payMethods {
-			if method["type"] == model.PaymentMethodHupijiao {
-				hasHupijiao = true
+			if method["type"] == model.PaymentMethodAlipay {
+				hasAlipay = true
 				break
 			}
 		}
-
-		if !hasHupijiao {
-			hupijiaoMethod := map[string]string{
+		if !hasAlipay {
+			payMethods = append(payMethods, map[string]string{
 				"name":      "支付宝",
-				"type":      model.PaymentMethodHupijiao,
+				"type":      model.PaymentMethodAlipay,
 				"color":     "rgba(var(--semi-cyan-5), 1)",
 				"min_topup": strconv.Itoa(setting.HupijiaoMinTopUp),
-			}
-			payMethods = append(payMethods, hupijiaoMethod)
+			})
 		}
 	}
 
@@ -131,6 +128,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":        setting.StripeMinTopUp,
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
+		"hupijiao_min_topup":      setting.HupijiaoMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 	}
@@ -475,7 +473,7 @@ func GetUserTopUps(c *gin.Context) {
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(topups)
+	pageInfo.SetItems(model.BuildTopUpRecords(topups))
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -500,7 +498,7 @@ func GetAllTopUps(c *gin.Context) {
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(topups)
+	pageInfo.SetItems(model.BuildTopUpRecords(topups))
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -519,6 +517,11 @@ func AdminCompleteTopUp(c *gin.Context) {
 	// 订单级互斥，防止并发补单
 	LockOrder(req.TradeNo)
 	defer UnlockOrder(req.TradeNo)
+
+	if order := model.GetSubscriptionOrderByTradeNo(req.TradeNo); order != nil {
+		common.ApiErrorMsg(c, "订阅订单不支持手动补单，请等待支付回调确认")
+		return
+	}
 
 	if err := model.ManualCompleteTopUp(req.TradeNo, c.ClientIP()); err != nil {
 		common.ApiError(c, err)

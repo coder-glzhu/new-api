@@ -4,6 +4,7 @@ import {
   Key,
   FileText,
   Wallet,
+  Receipt,
   Box,
   Users,
   Ticket,
@@ -84,6 +85,11 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
+          },
+          {
+            title: '我的订单',
+            url: '/orders',
+            icon: Receipt,
           },
           {
             title: t('Profile'),

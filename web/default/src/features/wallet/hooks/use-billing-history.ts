@@ -1,13 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
-import { useIsAdmin } from '@/hooks/use-admin'
-import {
-  getUserBillingHistory,
-  getAllBillingHistory,
-  completeOrder,
-  isApiSuccess,
-} from '../api'
+import { getUserBillingHistory, isApiSuccess } from '../api'
 import type { TopupRecord } from '../types'
 
 // ============================================================================
@@ -23,7 +17,6 @@ interface UseBillingHistoryOptions {
 
 export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   const { initialPage = 1, initialPageSize = 10 } = options
-  const isAdmin = useIsAdmin()
 
   const [records, setRecords] = useState<TopupRecord[]>([])
   const [total, setTotal] = useState(0)
@@ -31,7 +24,6 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   const [pageSize, setPageSize] = useState(initialPageSize)
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [completing, setCompleting] = useState(false)
 
   /**
    * Fetch billing history
@@ -39,9 +31,7 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   const fetchBillingHistory = useCallback(async () => {
     setLoading(true)
     try {
-      const response = isAdmin
-        ? await getAllBillingHistory(page, pageSize, keyword)
-        : await getUserBillingHistory(page, pageSize, keyword)
+      const response = await getUserBillingHistory(page, pageSize, keyword)
 
       if (isApiSuccess(response) && response.data) {
         setRecords(response.data.items || [])
@@ -62,41 +52,7 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, page, pageSize, keyword])
-
-  /**
-   * Complete a pending order (admin only)
-   */
-  const handleCompleteOrder = useCallback(
-    async (tradeNo: string) => {
-      if (!isAdmin) {
-        toast.error(i18next.t('Admin access required'))
-        return false
-      }
-
-      setCompleting(true)
-      try {
-        const response = await completeOrder({ trade_no: tradeNo })
-        if (isApiSuccess(response)) {
-          toast.success(i18next.t('Order completed successfully'))
-          // Refresh the list
-          await fetchBillingHistory()
-          return true
-        } else {
-          toast.error(response.message || i18next.t('Failed to complete order'))
-          return false
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to complete order:', error)
-        toast.error(i18next.t('Failed to complete order'))
-        return false
-      } finally {
-        setCompleting(false)
-      }
-    },
-    [isAdmin, fetchBillingHistory]
-  )
+  }, [page, pageSize, keyword])
 
   /**
    * Change page
@@ -133,12 +89,9 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
     pageSize,
     keyword,
     loading,
-    completing,
-    isAdmin,
     handlePageChange,
     handlePageSizeChange,
     handleSearch,
-    handleCompleteOrder,
     refresh: fetchBillingHistory,
   }
 }

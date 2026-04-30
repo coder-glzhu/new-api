@@ -114,6 +114,15 @@ export async function paySubscriptionEpay(
   }
 }
 
+export async function paySubscriptionHupijiao(
+  data: SubscriptionPayRequest
+): Promise<SubscriptionPayResponse> {
+  const res = await api.post('/api/subscription/hupijiao/pay', data, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
 // ============================================================================
 // User Self Subscriptions
 // ============================================================================

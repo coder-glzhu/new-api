@@ -14,7 +14,19 @@ import (
 // ---- Shared types ----
 
 type SubscriptionPlanDTO struct {
-	Plan model.SubscriptionPlan `json:"plan"`
+	Plan           model.SubscriptionPlan `json:"plan"`
+	TotalAmountUSD float64                `json:"total_amount_usd"`
+}
+
+func newSubscriptionPlanDTO(plan model.SubscriptionPlan) SubscriptionPlanDTO {
+	totalAmountUSD := 0.0
+	if plan.TotalAmount > 0 && common.QuotaPerUnit > 0 {
+		totalAmountUSD = float64(plan.TotalAmount) / common.QuotaPerUnit
+	}
+	return SubscriptionPlanDTO{
+		Plan:           plan,
+		TotalAmountUSD: totalAmountUSD,
+	}
 }
 
 type BillingPreferenceRequest struct {
@@ -31,9 +43,7 @@ func GetSubscriptionPlans(c *gin.Context) {
 	}
 	result := make([]SubscriptionPlanDTO, 0, len(plans))
 	for _, p := range plans {
-		result = append(result, SubscriptionPlanDTO{
-			Plan: p,
-		})
+		result = append(result, newSubscriptionPlanDTO(p))
 	}
 	common.ApiSuccess(c, result)
 }
@@ -96,9 +106,7 @@ func AdminListSubscriptionPlans(c *gin.Context) {
 	}
 	result := make([]SubscriptionPlanDTO, 0, len(plans))
 	for _, p := range plans {
-		result = append(result, SubscriptionPlanDTO{
-			Plan: p,
-		})
+		result = append(result, newSubscriptionPlanDTO(p))
 	}
 	common.ApiSuccess(c, result)
 }
@@ -124,6 +132,14 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 	}
 	if req.Plan.PriceAmount > 9999 {
 		common.ApiErrorMsg(c, "价格不能超过9999")
+		return
+	}
+	if req.Plan.PriceCNY <= 0 {
+		common.ApiErrorMsg(c, "人民币价格必须大于0")
+		return
+	}
+	if req.Plan.PriceCNY > 999999 {
+		common.ApiErrorMsg(c, "人民币价格不能超过999999")
 		return
 	}
 	if req.Plan.Currency == "" {
@@ -186,6 +202,14 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 	}
 	if req.Plan.PriceAmount > 9999 {
 		common.ApiErrorMsg(c, "价格不能超过9999")
+		return
+	}
+	if req.Plan.PriceCNY <= 0 {
+		common.ApiErrorMsg(c, "人民币价格必须大于0")
+		return
+	}
+	if req.Plan.PriceCNY > 999999 {
+		common.ApiErrorMsg(c, "人民币价格不能超过999999")
 		return
 	}
 	req.Plan.Id = id

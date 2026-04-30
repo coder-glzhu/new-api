@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { formatCnyCurrencyAmount } from '@/lib/currency'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { formatDuration, formatResetPeriod } from '../lib'
@@ -47,7 +48,7 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         size: 200,
       },
       {
-        accessorFn: (row) => row.plan.price_amount,
+        accessorFn: (row) => row.plan.price_cny,
         id: 'price',
         meta: { label: t('Price') },
         header: ({ column }) => (
@@ -55,7 +56,11 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         ),
         cell: ({ row }) => (
           <span className='font-semibold text-emerald-600'>
-            ${Number(row.original.plan.price_amount || 0).toFixed(2)}
+            {formatCnyCurrencyAmount(Number(row.original.plan.price_cny || 0), {
+              digitsLarge: 2,
+              digitsSmall: 2,
+              abbreviate: false,
+            })}
           </span>
         ),
         size: 100,

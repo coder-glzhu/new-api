@@ -21,59 +21,51 @@ type HupijiaoSubscriptionPayRequest struct {
 
 // SubscriptionRequestHupijiao 创建虎皮椒订阅支付订单
 func SubscriptionRequestHupijiao(c *gin.Context) {
-	if !setting.HupijiaoEnabled {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "虎皮椒支付未启用"})
+	if !isHupijiaoTopUpEnabled() {
+		common.ApiErrorMsg(c, "虎皮椒支付未启用")
 		return
 	}
 
 	var req HupijiaoSubscriptionPayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorMsg(c, err.Error())
 		return
 	}
 
 	userId := c.GetInt("id")
 	username := c.GetString("username")
 
-	hasActive, err := model.HasActiveUserSubscription(userId)
-	if err == nil && hasActive {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "您已有生效中的订阅，请等待到期后再购买"})
-		return
-	}
-
 	// 获取套餐信息
 	plan, err := model.GetSubscriptionPlanById(req.PlanId)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "套餐不存在"})
+		common.ApiErrorMsg(c, "套餐不存在")
 		return
 	}
 
 	if !plan.Enabled {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "套餐已下架"})
+		common.ApiErrorMsg(c, "套餐已下架")
 		return
 	}
 
-	// 检查用户是否有过多待支付订单（防刷单）
-	pendingCount, err := model.CountUserPendingSubscriptionOrders(userId, model.SubscriptionPaymentProviderHupijiao)
-	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("检查待支付订阅订单失败 user_id=%d err=%v", userId, err))
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "系统错误，请稍后重试"})
-		return
+	if plan.MaxPurchasePerUser > 0 {
+		count, err := model.CountUserSubscriptionsByPlan(userId, plan.Id)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if count >= int64(plan.MaxPurchasePerUser) {
+			common.ApiErrorMsg(c, "已达到该套餐购买上限")
+			return
+		}
 	}
-	if pendingCount >= 3 { // 最多3个待支付订单
-		c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "message": "您有过多未支付订单，请先完成或取消现有订单"})
+
+	if plan.PriceCNY <= 0 {
+		common.ApiErrorMsg(c, "该套餐未配置人民币价格，无法使用支付宝支付")
 		return
 	}
 
 	// 使用套餐配置的人民币价格
 	payMoney := plan.PriceCNY
-	if payMoney <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "该套餐未配置人民币价格，无法使用支付宝支付",
-		})
-		return
-	}
 
 	// 生成订单号
 	tradeNo := fmt.Sprintf("HUPS%d%d", userId, time.Now().UnixNano()/1e6)
@@ -84,7 +76,7 @@ func SubscriptionRequestHupijiao(c *gin.Context) {
 		PlanId:          plan.Id,
 		Money:           payMoney,
 		TradeNo:         tradeNo,
-		PaymentMethod:   model.SubscriptionPaymentMethodHupijiao,
+		PaymentMethod:   model.SubscriptionPaymentMethodAlipay,
 		PaymentProvider: model.SubscriptionPaymentProviderHupijiao,
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
@@ -93,6 +85,25 @@ func SubscriptionRequestHupijiao(c *gin.Context) {
 	err = order.Insert()
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("虎皮椒订阅订单创建失败 user_id=%d err=%v", userId, err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "创建订单失败",
+		})
+		return
+	}
+
+	topUp := &model.TopUp{
+		UserId:          userId,
+		Amount:          0,
+		Money:           payMoney,
+		TradeNo:         tradeNo,
+		PaymentMethod:   model.PaymentMethodAlipay,
+		PaymentProvider: model.PaymentProviderHupijiao,
+		CreateTime:      order.CreateTime,
+		Status:          common.TopUpStatusPending,
+	}
+	if err := topUp.Insert(); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("虎皮椒订阅账单订单创建失败 user_id=%d trade_no=%s err=%v", userId, tradeNo, err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"message": "创建订单失败",
@@ -110,6 +121,11 @@ func SubscriptionRequestHupijiao(c *gin.Context) {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("虎皮椒订阅API调用失败 trade_no=%s err=%v", tradeNo, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "创建支付失败: " + err.Error()})
 		return
+	}
+
+	if openId != "" {
+		topUp.OpenOrderId = openId
+		_ = topUp.Update()
 	}
 
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("虎皮椒订阅订单创建成功 user_id=%d trade_no=%s plan=%s", userId, tradeNo, plan.Title))
@@ -202,9 +218,8 @@ func HupijiaoSubscriptionWebhook(c *gin.Context) {
 func GetSubscriptionOrderStatus(c *gin.Context) {
 	userId := c.GetInt("id")
 	tradeNo := c.Param("trade_no")
-	openid := c.Query("openid")
 
-	if tradeNo == "" || openid == "" {
+	if tradeNo == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "参数缺失"})
 		return
 	}
@@ -230,26 +245,51 @@ func GetSubscriptionOrderStatus(c *gin.Context) {
 		return
 	}
 
-	isPaid, actualAmount, err := queryHupijiaoOrderStatus(openid)
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil || topUp.OpenOrderId == "" {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "订单尚未支付，请完成支付后再试", "data": gin.H{"paid": false}})
+		return
+	}
+	if expireTopUpOrderIfTimedOut(topUp) {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "订单已过期", "data": gin.H{"status": common.TopUpStatusExpired, "paid": false}})
+		return
+	}
+	if queryOpenId := c.Query("openid"); queryOpenId != "" && queryOpenId != topUp.OpenOrderId {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "订单号不匹配"})
+		return
+	}
+	openid := topUp.OpenOrderId
+
+	orderStatus, err := queryHupijiaoOrderStatus(openid)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("查询虎皮椒订阅订单失败 trade_no=%s err=%v", tradeNo, err))
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "查询订单失败"})
 		return
 	}
+	if orderStatus.TradeNo != "" && orderStatus.TradeNo != tradeNo {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("虎皮椒订阅查询订单号不匹配 trade_no=%s response_trade_no=%s openid=%s", tradeNo, orderStatus.TradeNo, openid))
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "订单号不匹配"})
+		return
+	}
+	if orderStatus.OpenOrderId != "" && orderStatus.OpenOrderId != openid {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("虎皮椒订阅查询平台订单号不匹配 trade_no=%s openid=%s response_openid=%s", tradeNo, openid, orderStatus.OpenOrderId))
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "订单号不匹配"})
+		return
+	}
 
-	if !isPaid {
+	if !orderStatus.Paid {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "订单尚未支付，请完成支付后再试", "data": gin.H{"paid": false}})
 		return
 	}
 
-	if actualAmount < order.Money-0.01 {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("订阅支付金额不匹配 trade_no=%s expected=%.2f actual=%.2f", tradeNo, order.Money, actualAmount))
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": fmt.Sprintf("支付金额不正确，应付%.2f元，实付%.2f元", order.Money, actualAmount), "data": gin.H{"paid": true}})
+	if orderStatus.Amount < order.Money-0.01 {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("订阅支付金额不匹配 trade_no=%s expected=%.2f actual=%.2f", tradeNo, order.Money, orderStatus.Amount))
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": fmt.Sprintf("支付金额不正确，应付%.2f元，实付%.2f元", order.Money, orderStatus.Amount), "data": gin.H{"paid": true}})
 		return
 	}
 
 	providerPayload := fmt.Sprintf(`{"open_order_id":"%s"}`, openid)
-	err = model.CompleteHupijiaoSubscriptionOrder(tradeNo, actualAmount, providerPayload)
+	err = model.CompleteHupijiaoSubscriptionOrder(tradeNo, orderStatus.Amount, providerPayload)
 	if err != nil {
 		if err.Error() == "订单状态异常" || order.Status == common.TopUpStatusSuccess {
 			c.JSON(http.StatusOK, gin.H{"success": true, "message": "订单已处理", "data": gin.H{"paid": true}})
@@ -260,6 +300,6 @@ func GetSubscriptionOrderStatus(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("主动查询订阅支付成功 user_id=%d trade_no=%s amount=%.2f", userId, tradeNo, actualAmount))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("主动查询订阅支付成功 user_id=%d trade_no=%s amount=%.2f", userId, tradeNo, orderStatus.Amount))
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "支付成功！订阅已生效", "data": gin.H{"paid": true}})
 }

@@ -553,3 +553,24 @@ export function formatLocalCurrencyAmount(
 
   return formatCurrencyValue(amount, merged, meta)
 }
+
+/**
+ * Format an amount in CNY without consulting the global quota display mode.
+ *
+ * This is intentionally display-only. It is useful for local payment gateway
+ * amounts that are already calculated in RMB and must not be converted again.
+ */
+export function formatCnyCurrencyAmount(
+  amount: number | null | undefined,
+  options?: CurrencyFormatOptions
+): string {
+  if (amount == null || Number.isNaN(amount)) return '-'
+
+  const merged = mergeOptions(options)
+  return formatCurrencyValue(amount, merged, {
+    kind: 'currency',
+    symbol: '¥',
+    currencyCode: 'CNY',
+    exchangeRate: 1,
+  })
+}

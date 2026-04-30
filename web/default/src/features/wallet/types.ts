@@ -24,6 +24,19 @@ export type StripePaymentResponse = ApiResponse<{ pay_link: string }>
 export type AffiliateCodeResponse = ApiResponse<string>
 export type AffiliateTransferResponse = ApiResponse
 export type CreemPaymentResponse = ApiResponse<{ checkout_url: string }>
+export type HupijiaoPaymentData = {
+  order_id?: string
+  qrcode_url?: string
+  pay_url?: string
+  trade_no?: string
+  create_time?: number
+  paid?: boolean
+}
+export type HupijiaoPaymentResponse = ApiResponse<HupijiaoPaymentData>
+export type HupijiaoOrderStatusResponse = ApiResponse<{
+  status?: string
+  paid?: boolean
+}>
 export type WaffoPaymentResponse = ApiResponse<
   { payment_url?: string } | string
 >
@@ -115,6 +128,10 @@ export interface TopupInfo {
   topup_link?: string
   /** Whether Creem topup is enabled */
   enable_creem_topup?: boolean
+  /** Whether Hupijiao/Alipay topup is enabled */
+  enable_hupijiao_topup?: boolean
+  /** Minimum topup amount for Hupijiao routed Alipay */
+  hupijiao_min_topup?: number
   /** Available Creem products */
   creem_products?: CreemProduct[]
   /** Whether Waffo topup is enabled */
@@ -218,7 +235,12 @@ export interface UserWalletData {
 /**
  * Topup record status
  */
-export type TopupStatus = 'success' | 'pending' | 'expired'
+export type TopupStatus =
+  | 'success'
+  | 'pending'
+  | 'failed'
+  | 'expired'
+  | 'canceled'
 
 /**
  * Topup billing record
@@ -234,8 +256,18 @@ export interface TopupRecord {
   money: number
   /** Trade/order number */
   trade_no: string
+  /** Payment platform order number */
+  open_order_id?: string
   /** Payment method type */
   payment_method: string
+  /** Payment provider/gateway type */
+  payment_provider?: string
+  /** Order type, e.g. topup or subscription */
+  order_type?: 'topup' | 'subscription' | string
+  /** Human readable order content/title */
+  order_title?: string
+  /** Actual payment currency, e.g. CNY or USD */
+  payment_currency?: string
   /** Creation timestamp */
   create_time: number
   /** Completion timestamp */

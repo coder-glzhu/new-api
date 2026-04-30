@@ -23,9 +23,17 @@ export const STATUS_CONFIG: Record<TopupStatus, StatusConfig> = {
     variant: 'warning',
     label: 'Pending',
   },
+  failed: {
+    variant: 'danger',
+    label: 'Failed',
+  },
   expired: {
     variant: 'danger',
     label: 'Expired',
+  },
+  canceled: {
+    variant: 'neutral',
+    label: 'Cancelled',
   },
 }
 
@@ -42,14 +50,20 @@ export function getStatusConfig(status: TopupStatus): StatusConfig {
 export const PAYMENT_METHOD_NAMES: Record<string, string> = {
   stripe: 'Stripe',
   alipay: 'Alipay',
+  hupijiao: 'Alipay',
   wxpay: 'WeChat Pay',
   waffo: 'Waffo',
+  waffo_pancake: 'Waffo Pancake',
 }
 
 /**
  * Get payment method display name
  */
-export function getPaymentMethodName(method: string): string {
+export function getPaymentMethodName(
+  method: string,
+  provider?: string
+): string {
+  if (provider === 'hupijiao' || method === 'hupijiao') return 'Alipay'
   return PAYMENT_METHOD_NAMES[method] || method
 }
 

@@ -69,6 +69,25 @@ export function isWaffoPancakePayment(paymentType: string): boolean {
 }
 
 /**
+ * Check if payment method is Hupijiao/Alipay
+ */
+export function isHupijiaoPayment(paymentType: string): boolean {
+  return paymentType === PAYMENT_TYPES.HUPIJIAO
+}
+
+/**
+ * Check if the visible Alipay method should be routed through Hupijiao.
+ */
+export function shouldRouteAlipayThroughHupijiao(
+  topupInfo: TopupInfo | null,
+  paymentType: string
+): boolean {
+  return (
+    !!topupInfo?.enable_hupijiao_topup && paymentType === PAYMENT_TYPES.ALIPAY
+  )
+}
+
+/**
  * Get default payment type from topup info
  */
 export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
@@ -118,6 +137,17 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 
   if (topupInfo.enable_waffo_pancake_topup) {
     return topupInfo.waffo_pancake_min_topup || DEFAULT_MIN_TOPUP
+  }
+
+  if (topupInfo.enable_hupijiao_topup) {
+    const alipayMethod = topupInfo.pay_methods?.find(
+      (method) => method.type === PAYMENT_TYPES.ALIPAY
+    )
+    return (
+      alipayMethod?.min_topup ||
+      topupInfo.hupijiao_min_topup ||
+      DEFAULT_MIN_TOPUP
+    )
   }
 
   return DEFAULT_MIN_TOPUP

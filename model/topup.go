@@ -27,7 +27,26 @@ type TopUp struct {
 	Status          string  `json:"status"`
 }
 
+type TopUpRecord struct {
+	Id              int     `json:"id"`
+	UserId          int     `json:"user_id"`
+	Amount          int64   `json:"amount"`
+	Money           float64 `json:"money"`
+	TradeNo         string  `json:"trade_no"`
+	OpenOrderId     string  `json:"open_order_id"`
+	PaymentMethod   string  `json:"payment_method"`
+	PaymentProvider string  `json:"payment_provider"`
+	CreateTime      int64   `json:"create_time"`
+	CompleteTime    int64   `json:"complete_time"`
+	Status          string  `json:"status"`
+
+	OrderType       string `json:"order_type"`
+	OrderTitle      string `json:"order_title"`
+	PaymentCurrency string `json:"payment_currency"`
+}
+
 const (
+	PaymentMethodAlipay       = "alipay"
 	PaymentMethodStripe       = "stripe"
 	PaymentMethodCreem        = "creem"
 	PaymentMethodWaffo        = "waffo"
@@ -49,6 +68,105 @@ var (
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
 )
+
+func BuildTopUpRecords(topups []*TopUp) []TopUpRecord {
+	records := make([]TopUpRecord, 0, len(topups))
+	tradeNos := make([]string, 0, len(topups))
+	for _, topUp := range topups {
+		if topUp == nil {
+			continue
+		}
+		records = append(records, TopUpRecord{
+			Id:              topUp.Id,
+			UserId:          topUp.UserId,
+			Amount:          topUp.Amount,
+			Money:           topUp.Money,
+			TradeNo:         topUp.TradeNo,
+			OpenOrderId:     topUp.OpenOrderId,
+			PaymentMethod:   topUp.PaymentMethod,
+			PaymentProvider: topUp.PaymentProvider,
+			CreateTime:      topUp.CreateTime,
+			CompleteTime:    topUp.CompleteTime,
+			Status:          topUp.Status,
+			OrderType:       "topup",
+			OrderTitle:      "Top-up",
+			PaymentCurrency: inferPaymentCurrency(topUp.PaymentMethod, topUp.PaymentProvider),
+		})
+		tradeNos = append(tradeNos, topUp.TradeNo)
+	}
+
+	if len(tradeNos) == 0 {
+		return records
+	}
+
+	var orders []SubscriptionOrder
+	if err := DB.Where("trade_no IN ?", tradeNos).Find(&orders).Error; err != nil {
+		common.SysError("failed to load subscription orders for topup records: " + err.Error())
+		return records
+	}
+	if len(orders) == 0 {
+		return records
+	}
+
+	ordersByTradeNo := make(map[string]SubscriptionOrder, len(orders))
+	planIds := make([]int, 0, len(orders))
+	seenPlanIds := map[int]bool{}
+	for _, order := range orders {
+		ordersByTradeNo[order.TradeNo] = order
+		if order.PlanId > 0 && !seenPlanIds[order.PlanId] {
+			seenPlanIds[order.PlanId] = true
+			planIds = append(planIds, order.PlanId)
+		}
+	}
+
+	plansById := map[int]SubscriptionPlan{}
+	if len(planIds) > 0 {
+		var plans []SubscriptionPlan
+		if err := DB.Where("id IN ?", planIds).Find(&plans).Error; err != nil {
+			common.SysError("failed to load subscription plans for topup records: " + err.Error())
+		} else {
+			for _, plan := range plans {
+				plansById[plan.Id] = plan
+			}
+		}
+	}
+
+	for i := range records {
+		order, ok := ordersByTradeNo[records[i].TradeNo]
+		if !ok {
+			continue
+		}
+		records[i].OrderType = "subscription"
+		records[i].OrderTitle = "Subscription"
+		if plan, ok := plansById[order.PlanId]; ok && strings.TrimSpace(plan.Title) != "" {
+			records[i].OrderTitle = plan.Title
+		}
+		if records[i].PaymentMethod == "" {
+			records[i].PaymentMethod = order.PaymentMethod
+		}
+		if records[i].PaymentProvider == "" {
+			records[i].PaymentProvider = order.PaymentProvider
+		}
+		records[i].PaymentCurrency = inferPaymentCurrency(records[i].PaymentMethod, records[i].PaymentProvider)
+	}
+
+	return records
+}
+
+func inferPaymentCurrency(paymentMethod string, paymentProvider string) string {
+	method := strings.ToLower(strings.TrimSpace(paymentMethod))
+	provider := strings.ToLower(strings.TrimSpace(paymentProvider))
+	switch {
+	case provider == PaymentProviderHupijiao || method == PaymentMethodHupijiao:
+		return "CNY"
+	case provider == PaymentProviderEpay || method == PaymentMethodAlipay || method == "wxpay":
+		return "CNY"
+	case provider == PaymentProviderStripe || method == PaymentMethodStripe:
+		return "USD"
+	default:
+		return strings.ToUpper(method)
+	}
+}
 
 func (topUp *TopUp) Insert() error {
 	var err error
@@ -262,7 +380,7 @@ func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (to
 			tx.Rollback()
 			return nil, 0, perr
 		}
-		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
+		query = query.Where("trade_no LIKE ? ESCAPE '!' OR open_order_id LIKE ? ESCAPE '!'", pattern, pattern)
 	}
 
 	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {
@@ -302,7 +420,7 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 			tx.Rollback()
 			return nil, 0, perr
 		}
-		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
+		query = query.Where("trade_no LIKE ? ESCAPE '!' OR open_order_id LIKE ? ESCAPE '!'", pattern, pattern)
 	}
 
 	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {

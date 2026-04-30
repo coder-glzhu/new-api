@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { getSelf } from '@/lib/api'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { SectionPageLayout } from '@/components/layout'
+import { HupijiaoPaymentDialog } from '@/components/payment/hupijiao-payment-dialog'
+import { getHupijiaoTopupOrderStatus, isApiSuccess } from './api'
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
@@ -19,19 +22,23 @@ import {
   useAffiliate,
   useRedemption,
   useCreemPayment,
+  useHupijiaoPayment,
   useWaffoPayment,
   useWaffoPancakePayment,
 } from './hooks'
 import {
   getDefaultPaymentType,
   getMinTopupAmount,
+  isHupijiaoPayment,
   isWaffoPancakePayment,
+  shouldRouteAlipayThroughHupijiao,
 } from './lib'
 import type {
   UserWalletData,
   PaymentMethod,
   PresetAmount,
   CreemProduct,
+  HupijiaoPaymentData,
 } from './types'
 
 interface WalletProps {
@@ -54,6 +61,9 @@ export function Wallet(props: WalletProps) {
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
     useState<CreemProduct | null>(null)
+  const [hupijiaoDialogOpen, setHupijiaoDialogOpen] = useState(false)
+  const [hupijiaoPayment, setHupijiaoPayment] =
+    useState<HupijiaoPaymentData | null>(null)
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
@@ -80,6 +90,8 @@ export function Wallet(props: WalletProps) {
   } = useAffiliate()
   const { redeeming, redeemCode } = useRedemption()
   const { processing: creemProcessing, processCreemPayment } = useCreemPayment()
+  const { processing: hupijiaoProcessing, processHupijiaoPayment } =
+    useHupijiaoPayment()
   const { processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
@@ -101,6 +113,64 @@ export function Wallet(props: WalletProps) {
   }, [])
 
   useEffect(() => {
+    if (!hupijiaoDialogOpen || !hupijiaoPayment?.trade_no) {
+      return
+    }
+
+    let stopped = false
+    let attempts = 0
+
+    const pollOrder = async () => {
+      if (stopped) return
+      attempts += 1
+
+      try {
+        const response = await getHupijiaoTopupOrderStatus(
+          hupijiaoPayment.trade_no || '',
+          hupijiaoPayment.order_id
+        )
+
+        if (isApiSuccess(response) && response.data?.paid) {
+          stopped = true
+          setHupijiaoDialogOpen(false)
+          setHupijiaoPayment(null)
+          await fetchUser()
+          toast.success(t('Payment successful'))
+        } else if (
+          isApiSuccess(response) &&
+          response.data?.status === 'expired'
+        ) {
+          stopped = true
+          setHupijiaoDialogOpen(false)
+          setHupijiaoPayment(null)
+          toast.error('订单已过期，请重新下单')
+        }
+      } catch {
+        // Ignore transient polling failures; webhook can still complete the order.
+      }
+
+      if (attempts >= 60) {
+        stopped = true
+      }
+    }
+
+    const startTimer = window.setTimeout(pollOrder, 2000)
+    const interval = window.setInterval(pollOrder, 3000)
+
+    return () => {
+      stopped = true
+      window.clearTimeout(startTimer)
+      window.clearInterval(interval)
+    }
+  }, [
+    fetchUser,
+    hupijiaoDialogOpen,
+    hupijiaoPayment?.order_id,
+    hupijiaoPayment?.trade_no,
+    t,
+  ])
+
+  useEffect(() => {
     fetchUser()
   }, [fetchUser])
 
@@ -119,7 +189,12 @@ export function Wallet(props: WalletProps) {
 
       // Calculate initial payment amount with default payment type
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
-      calculatePaymentAmount(minTopup, defaultPaymentType)
+      calculatePaymentAmount(minTopup, defaultPaymentType, {
+        useHupijiao: shouldRouteAlipayThroughHupijiao(
+          topupInfo,
+          defaultPaymentType
+        ),
+      })
     }
   }, [topupInfo, topupAmount, calculatePaymentAmount])
 
@@ -128,18 +203,26 @@ export function Wallet(props: WalletProps) {
     return selectedPaymentMethod?.type || getDefaultPaymentType(topupInfo)
   }, [selectedPaymentMethod, topupInfo])
 
+  const calculateRoutedPaymentAmount = useCallback(
+    (amount: number, paymentType: string) =>
+      calculatePaymentAmount(amount, paymentType, {
+        useHupijiao: shouldRouteAlipayThroughHupijiao(topupInfo, paymentType),
+      }),
+    [calculatePaymentAmount, topupInfo]
+  )
+
   // Handle preset selection
   const handleSelectPreset = (preset: PresetAmount) => {
     setTopupAmount(preset.value)
     setSelectedPreset(preset.value)
-    calculatePaymentAmount(preset.value, getCurrentPaymentType())
+    calculateRoutedPaymentAmount(preset.value, getCurrentPaymentType())
   }
 
   // Handle topup amount change
   const handleTopupAmountChange = (amount: number) => {
     setTopupAmount(amount)
     setSelectedPreset(null)
-    calculatePaymentAmount(amount, getCurrentPaymentType())
+    calculateRoutedPaymentAmount(amount, getCurrentPaymentType())
   }
 
   // Handle payment method selection
@@ -155,7 +238,7 @@ export function Wallet(props: WalletProps) {
       }
 
       // Calculate payment amount and show confirmation dialog
-      await calculatePaymentAmount(topupAmount, method.type)
+      await calculateRoutedPaymentAmount(topupAmount, method.type)
       setConfirmDialogOpen(true)
     } finally {
       setPaymentLoading(null)
@@ -167,6 +250,23 @@ export function Wallet(props: WalletProps) {
     if (!selectedPaymentMethod) return
 
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
+    const isHupijiao =
+      isHupijiaoPayment(selectedPaymentMethod.type) ||
+      shouldRouteAlipayThroughHupijiao(topupInfo, selectedPaymentMethod.type)
+
+    if (isHupijiao) {
+      const payment = await processHupijiaoPayment(topupAmount)
+      if (payment) {
+        setConfirmDialogOpen(false)
+        setHupijiaoPayment({
+          ...payment,
+          create_time: Math.floor(Date.now() / 1000),
+        })
+        setHupijiaoDialogOpen(true)
+      }
+      return
+    }
+
     const success = isPancake
       ? await processWaffoPancakePayment(topupAmount)
       : await processPayment(topupAmount, selectedPaymentMethod.type)
@@ -300,7 +400,7 @@ export function Wallet(props: WalletProps) {
         paymentAmount={paymentAmount}
         paymentMethod={selectedPaymentMethod}
         calculating={calculating}
-        processing={processing || pancakeProcessing}
+        processing={processing || pancakeProcessing || hupijiaoProcessing}
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />
@@ -324,6 +424,18 @@ export function Wallet(props: WalletProps) {
         onConfirm={handleCreemConfirm}
         product={selectedCreemProduct}
         processing={creemProcessing}
+      />
+
+      <HupijiaoPaymentDialog
+        open={hupijiaoDialogOpen}
+        onOpenChange={setHupijiaoDialogOpen}
+        payment={hupijiaoPayment}
+        amount={paymentAmount}
+        onExpired={() => {
+          setHupijiaoDialogOpen(false)
+          setHupijiaoPayment(null)
+          toast.error('订单已过期，请重新下单')
+        }}
       />
     </>
   )

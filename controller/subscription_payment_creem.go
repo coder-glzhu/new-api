@@ -66,11 +66,6 @@ func SubscriptionRequestCreemPay(c *gin.Context) {
 		return
 	}
 
-	if hasActive, chkErr := model.HasActiveUserSubscription(userId); chkErr == nil && hasActive {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "您已有生效中的订阅，请等待到期后再购买"})
-		return
-	}
-
 	if plan.MaxPurchasePerUser > 0 {
 		count, err := model.CountUserSubscriptionsByPlan(userId, plan.Id)
 		if err != nil {
