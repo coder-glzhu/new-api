@@ -2,6 +2,28 @@ import { STORAGE_KEYS } from '../constants'
 import type { PlaygroundConfig, ParameterEnabled, Message } from '../types'
 import { sanitizeMessagesOnLoad } from './message-utils'
 
+function isStoredMessage(value: unknown): value is Message {
+  if (!value || typeof value !== 'object') return false
+
+  const message = value as Partial<Message>
+  const validRole =
+    message.from === 'user' ||
+    message.from === 'assistant' ||
+    message.from === 'system'
+
+  return (
+    typeof message.key === 'string' &&
+    validRole &&
+    Array.isArray(message.versions) &&
+    message.versions.every(
+      (version) =>
+        version &&
+        typeof version.id === 'string' &&
+        typeof version.content === 'string'
+    )
+  )
+}
+
 /**
  * Load playground config from localStorage
  */
@@ -70,10 +92,16 @@ export function loadMessages(): Message[] | null {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.MESSAGES)
     if (saved) {
-      const parsed: Message[] = JSON.parse(saved)
-      const sanitized = sanitizeMessagesOnLoad(parsed)
+      const parsed: unknown = JSON.parse(saved)
+      if (!Array.isArray(parsed)) {
+        saveMessages([])
+        return []
+      }
+
+      const validMessages = parsed.filter(isStoredMessage)
+      const sanitized = sanitizeMessagesOnLoad(validMessages)
       // Persist sanitized result to avoid re-sanitizing on subsequent loads
-      if (sanitized !== parsed) {
+      if (sanitized !== parsed || validMessages.length !== parsed.length) {
         saveMessages(sanitized)
       }
       return sanitized

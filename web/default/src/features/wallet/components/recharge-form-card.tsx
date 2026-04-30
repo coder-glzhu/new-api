@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Gift, ExternalLink, Loader2, Receipt, WalletCards } from 'lucide-react'
+import { Gift, ExternalLink, Loader2, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -56,7 +56,6 @@ interface RechargeFormCardProps {
   loading?: boolean
   priceRatio?: number
   usdExchangeRate?: number
-  onOpenBilling?: () => void
   creemProducts?: CreemProduct[]
   enableCreemTopup?: boolean
   onCreemProductSelect?: (product: CreemProduct) => void
@@ -86,7 +85,6 @@ export function RechargeFormCard({
   loading,
   priceRatio = 1,
   usdExchangeRate = 1,
-  onOpenBilling,
   creemProducts,
   enableCreemTopup,
   onCreemProductSelect,
@@ -190,17 +188,6 @@ export function RechargeFormCard({
               </CardDescription>
             </div>
           </div>
-          {onOpenBilling && (
-            <Button
-              variant='outline'
-              size='sm'
-              onClick={onOpenBilling}
-              className='w-full gap-2 sm:w-auto'
-            >
-              <Receipt className='h-4 w-4' />
-              我的订单
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent className='space-y-6 pt-6'>

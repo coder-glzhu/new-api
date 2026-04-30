@@ -49,7 +49,6 @@ const routerMap = {
   models: '/console/models',
   deployment: '/console/deployment',
   playground: '/console/playground',
-  drawing: '/console/drawing',
   personal: '/console/personal',
 };
 
@@ -215,11 +214,6 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('操练场'),
         itemKey: 'playground',
         to: '/playground',
-      },
-      {
-        text: t('绘画'),
-        itemKey: 'drawing',
-        to: '/drawing',
       },
       {
         text: t('聊天'),
