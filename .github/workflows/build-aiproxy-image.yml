@@ -33,10 +33,13 @@ jobs:
           OFFICIAL_TAG="${OFFICIAL_TAG#upstream/}"
           SHORT_SHA="$(git rev-parse --short=12 HEAD)"
           VERSION="${OFFICIAL_TAG}+${SHORT_SHA}"
+          DOCKER_TAG="${OFFICIAL_TAG}-${SHORT_SHA}"
           echo "$VERSION" > VERSION
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$DOCKER_TAG" >> "$GITHUB_OUTPUT"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Building version: $VERSION"
+          echo "Docker tag: $DOCKER_TAG"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -56,7 +59,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,format=short
-            type=raw,value=${{ steps.version.outputs.value }}
+            type=raw,value=${{ steps.version.outputs.tag }}
             type=raw,value=latest
 
       - name: Build and push (linux/amd64)
