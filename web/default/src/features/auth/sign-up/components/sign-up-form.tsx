@@ -35,7 +35,7 @@ import { registerFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
-import { getAffiliateCode } from '@/features/auth/lib/storage'
+import { getAffiliateCode, saveAffiliateCode } from '@/features/auth/lib/storage'
 
 export function SignUpForm({
   className,
@@ -111,6 +111,14 @@ export function SignUpForm({
       setAgreedToLegal(true)
     }
   }, [requiresLegalConsent])
+
+  // 把 URL 上的 ?aff=xxx 推广码持久化到 localStorage：之后的邮箱注册（onSubmit）
+  // 与 OAuth 注册（getOAuthState 读取 'aff'）都会从 localStorage 取值。
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const code = new URLSearchParams(window.location.search).get('aff')
+    if (code) saveAffiliateCode(code)
+  }, [])
 
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
