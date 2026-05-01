@@ -13,6 +13,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { getUserInfo } from '../../api'
 import type { UserInfo } from '../../types'
+import { UserSubscriptionsSection } from './user-subscriptions-section'
 
 interface UserInfoDialogProps {
   userId: number | null
@@ -161,6 +162,11 @@ export function UserInfoDialog({
                 </div>
               </div>
             )}
+
+            {/* Subscription Plans */}
+            {userId ? (
+              <UserSubscriptionsSection userId={userId} open={open} />
+            ) : null}
           </div>
         ) : (
           <div className='text-muted-foreground py-8 text-center text-sm'>

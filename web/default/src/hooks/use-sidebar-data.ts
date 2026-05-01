@@ -14,6 +14,7 @@ import {
   FlaskConical,
   MessageSquare,
   CreditCard,
+  Crown,
   ListTodo,
   Settings,
 } from 'lucide-react'
@@ -126,6 +127,11 @@ export function useSidebarData(): SidebarData {
             title: t('Subscription Management'),
             url: '/subscriptions',
             icon: CreditCard,
+          },
+          {
+            title: t('Subscription Users'),
+            url: '/subscription-users',
+            icon: Crown,
           },
           {
             title: t('System Settings'),

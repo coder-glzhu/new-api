@@ -1334,6 +1334,13 @@ func CompleteHupijiaoSubscriptionOrder(tradeNo string, amount float64, providerP
 		refCol = `"trade_no"`
 	}
 
+	// 事务外用于写日志的字段；仅在订单确实在本次完成时被赋值，
+	// 幂等场景（订单已 success）保持零值以避免重复记录。
+	var logUserId int
+	var logPlanTitle string
+	var logMoney float64
+	var logPaymentMethod string
+
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		// 锁定订单记录
 		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(&order).Error
@@ -1389,12 +1396,24 @@ func CompleteHupijiaoSubscriptionOrder(tradeNo string, amount float64, providerP
 			return err
 		}
 
+		logUserId = order.UserId
+		logPlanTitle = plan.Title
+		logMoney = order.Money
+		logPaymentMethod = order.PaymentMethod
+
 		return nil
 	})
 
 	if err != nil {
 		common.SysError("hupijiao subscription failed: " + err.Error())
 		return err
+	}
+
+	// 与 CompleteSubscriptionOrder 行为对齐：在事务外写一条 LogTypeTopup 日志，
+	// 使「通用日志 → 充值」过滤可以查到订阅购买记录。
+	if logUserId > 0 {
+		msg := fmt.Sprintf("订阅购买成功，套餐: %s，支付金额: %.2f，支付方式: %s", logPlanTitle, logMoney, logPaymentMethod)
+		RecordLog(logUserId, LogTypeTopup, msg)
 	}
 
 	return nil

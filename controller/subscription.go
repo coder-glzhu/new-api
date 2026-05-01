@@ -341,6 +341,27 @@ func AdminListUserSubscriptions(c *gin.Context) {
 	common.ApiSuccess(c, subs)
 }
 
+func AdminListSubscriptionUsersOverview(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	planId, _ := strconv.Atoi(c.Query("plan_id"))
+	items, total, summary, err := model.ListSubscriptionUserOverview(model.SubscriptionUserOverviewFilter{
+		Keyword: c.Query("keyword"),
+		Status:  c.Query("status"),
+		PlanId:  planId,
+	}, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"items":     items,
+		"total":     int(total),
+		"page":      pageInfo.GetPage(),
+		"page_size": pageInfo.GetPageSize(),
+		"summary":   summary,
+	})
+}
+
 type AdminCreateUserSubscriptionRequest struct {
 	PlanId int `json:"plan_id"`
 }
