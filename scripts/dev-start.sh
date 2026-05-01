@@ -12,6 +12,8 @@ export PATH="$HOME/.bun/bin:$PATH"
 BACKEND_PORT="${PORT:-3000}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${FRONTEND_PORT:-5174}"
+BACKEND_START_TIMEOUT_SECONDS="${BACKEND_START_TIMEOUT_SECONDS:-240}"
+FRONTEND_START_TIMEOUT_SECONDS="${FRONTEND_START_TIMEOUT_SECONDS:-40}"
 
 export PORT="$BACKEND_PORT"
 export REDIS_CONN_STRING="${REDIS_CONN_STRING:-}"
@@ -145,7 +147,13 @@ start_backend() {
   ) >"$LOG_DIR/dev-backend.log" 2>&1 &
   BACKEND_PID=$!
   echo "$BACKEND_PID" >"$LOG_DIR/dev-backend.pid"
-  wait_for_port "127.0.0.1" "$BACKEND_PORT" "Go 后端" 40 "$BACKEND_PID" "$LOG_DIR/dev-backend.log"
+  wait_for_port \
+    "127.0.0.1" \
+    "$BACKEND_PORT" \
+    "Go 后端" \
+    "$BACKEND_START_TIMEOUT_SECONDS" \
+    "$BACKEND_PID" \
+    "$LOG_DIR/dev-backend.log"
 }
 
 start_frontend() {
@@ -162,7 +170,13 @@ start_frontend() {
   ) >"$LOG_DIR/dev-frontend.log" 2>&1 &
   FRONTEND_PID=$!
   echo "$FRONTEND_PID" >"$LOG_DIR/dev-frontend.pid"
-  wait_for_port "$FRONTEND_HOST" "$FRONTEND_PORT" "前端" 40 "$FRONTEND_PID" "$LOG_DIR/dev-frontend.log"
+  wait_for_port \
+    "$FRONTEND_HOST" \
+    "$FRONTEND_PORT" \
+    "前端" \
+    "$FRONTEND_START_TIMEOUT_SECONDS" \
+    "$FRONTEND_PID" \
+    "$LOG_DIR/dev-frontend.log"
 }
 
 ensure_remote_sql_dsn

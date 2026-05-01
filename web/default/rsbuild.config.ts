@@ -23,6 +23,12 @@ export default defineConfig(({ envMode }) => {
 
   return {
     plugins: [pluginReact()],
+    source: {
+      tsconfigPath: './tsconfig.app.json',
+      entry: {
+        index: './src/main.tsx',
+      },
+    },
     // Rsbuild 2: replaces deprecated `performance.chunkSplit` (RSPack 2 aligned)
     splitChunks: {
       preset: 'default',
@@ -48,11 +54,6 @@ export default defineConfig(({ envMode }) => {
           priority: 0,
           enforce: true,
         },
-      },
-    },
-    source: {
-      entry: {
-        index: './src/main.tsx',
       },
     },
     resolve: {
