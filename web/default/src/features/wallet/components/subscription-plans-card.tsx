@@ -10,9 +10,7 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -24,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TitledCard } from '@/components/ui/titled-card'
 import {
   Tooltip,
   TooltipContent,
@@ -49,6 +48,7 @@ import type { PaymentMethod, TopupInfo } from '../types'
 
 interface SubscriptionPlansCardProps {
   topupInfo: TopupInfo | null
+  onAvailabilityChange?: (available: boolean) => void
 }
 
 function getEpayMethods(
@@ -65,7 +65,10 @@ function getEpayMethods(
   )
 }
 
-export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
+export function SubscriptionPlansCard({
+  topupInfo,
+  onAvailabilityChange,
+}: SubscriptionPlansCardProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
 
@@ -85,17 +88,17 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
 
   const enableStripe = !!status?.enable_stripe_topup
-  const enableCreem = !!props.topupInfo?.enable_creem_topup
+  const enableCreem = !!topupInfo?.enable_creem_topup
   const alipayMethod = useMemo(
-    () => props.topupInfo?.pay_methods?.find((m) => m.type === 'alipay'),
-    [props.topupInfo?.pay_methods]
+    () => topupInfo?.pay_methods?.find((m) => m.type === 'alipay'),
+    [topupInfo?.pay_methods]
   )
   const enableHupijiao =
-    !!props.topupInfo?.enable_hupijiao_topup && !!alipayMethod
+    !!topupInfo?.enable_hupijiao_topup && !!alipayMethod
   const enableOnlineTopUp = !!status?.enable_online_topup
   const epayMethods = useMemo(
-    () => getEpayMethods(props.topupInfo?.pay_methods, enableHupijiao),
-    [props.topupInfo?.pay_methods, enableHupijiao]
+    () => getEpayMethods(topupInfo?.pay_methods, enableHupijiao),
+    [topupInfo?.pay_methods, enableHupijiao]
   )
 
   const fetchPlans = useCallback(async () => {
@@ -163,6 +166,7 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
 
   const hasActive = activeSubscriptions.length > 0
   const hasAny = allSubscriptions.length > 0
+  const isAvailable = loading || plans.length > 0 || hasAny
   const disablePref = !hasActive
   const isSubPref =
     billingPreference === 'subscription_first' ||
@@ -179,6 +183,10 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
     }
     return map
   }, [allSubscriptions])
+
+  useEffect(() => {
+    onAvailabilityChange?.(isAvailable)
+  }, [isAvailable, onAvailabilityChange])
 
   const planTitleMap = useMemo(() => {
     const map = new Map<number, string>()
@@ -206,11 +214,11 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
 
   if (loading) {
     return (
-      <Card className='overflow-hidden'>
-        <CardHeader className='border-b'>
+      <Card className='gap-0 overflow-hidden py-0'>
+        <CardHeader className='border-b p-3 !pb-3 sm:p-5 sm:!pb-5'>
           <Skeleton className='h-6 w-32' />
         </CardHeader>
-        <CardContent className='space-y-4 pt-6'>
+        <CardContent className='space-y-4 p-3 sm:p-5'>
           <Skeleton className='h-20 w-full' />
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'>
             {Array.from({ length: 3 }).map((_, i) => (
@@ -228,27 +236,16 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
 
   return (
     <>
-      <Card className='overflow-hidden'>
-        <CardHeader className='border-b'>
-          <div className='flex items-center gap-3'>
-            <div className='bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-lg'>
-              <Crown className='h-4 w-4' />
-            </div>
-            <div className='min-w-0'>
-              <CardTitle className='text-xl tracking-tight'>
-                {t('Subscription Plans')}
-              </CardTitle>
-              <CardDescription>
-                {t('Purchase a plan to enjoy model benefits')}
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className='space-y-5 pt-6'>
+      <TitledCard
+        title={t('Subscription Plans')}
+        description={t('Purchase a plan to enjoy model benefits')}
+        icon={<Crown className='h-4 w-4' />}
+        contentClassName='space-y-4 sm:space-y-5'
+      >
           {/* My subscriptions & billing preference */}
-          <div className='rounded-xl border p-4'>
-            <div className='flex flex-wrap items-center justify-between gap-3'>
-              <div className='flex items-center gap-2'>
+          <div className='rounded-xl border p-3 sm:p-4'>
+            <div className='flex flex-wrap items-center justify-between gap-2.5 sm:gap-3'>
+              <div className='flex min-w-0 flex-wrap items-center gap-2'>
                 <span className='text-sm font-medium'>
                   {t('My Subscriptions')}
                 </span>
@@ -280,12 +277,12 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
                   )}
                 </span>
               </div>
-              <div className='flex items-center gap-2'>
+              <div className='flex w-full items-center gap-2 sm:w-auto'>
                 <Select
                   value={displayPref}
                   onValueChange={handlePreferenceChange}
                 >
-                  <SelectTrigger className='h-8 w-[140px] text-xs'>
+                  <SelectTrigger className='h-8 flex-1 text-xs sm:w-[140px] sm:flex-none'>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -467,7 +464,7 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
 
           {/* Available plans grid */}
           {plans.length > 0 ? (
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'>
+            <div className='grid grid-cols-1 gap-3 2xl:grid-cols-2 2xl:gap-4'>
               {plans.map((p, index) => {
                 const plan = p?.plan
                 if (!plan) return null
@@ -509,7 +506,7 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
                       isPopular && 'border-primary/70 shadow-sm'
                     )}
                   >
-                    <CardContent className='flex h-full flex-col p-4'>
+                    <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
                       <div className='mb-2 flex items-start justify-between gap-3'>
                         <div className='min-w-0'>
                           <h4 className='truncate font-semibold'>
@@ -592,8 +589,7 @@ export function SubscriptionPlansCard(props: SubscriptionPlansCardProps) {
               {t('No plans available')}
             </p>
           )}
-        </CardContent>
-      </Card>
+      </TitledCard>
 
       <SubscriptionPurchaseDialog
         open={purchaseOpen}

@@ -64,6 +64,7 @@ export function Wallet(props: WalletProps) {
   const [hupijiaoDialogOpen, setHupijiaoDialogOpen] = useState(false)
   const [hupijiaoPayment, setHupijiaoPayment] =
     useState<HupijiaoPaymentData | null>(null)
+  const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
@@ -95,6 +96,14 @@ export function Wallet(props: WalletProps) {
   const { processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
+
+  const calculateRoutedPaymentAmount = useCallback(
+    (amount: number, paymentType: string) =>
+      calculatePaymentAmount(amount, paymentType, {
+        useHupijiao: shouldRouteAlipayThroughHupijiao(topupInfo, paymentType),
+      }),
+    [calculatePaymentAmount, topupInfo]
+  )
 
   // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
@@ -189,27 +198,14 @@ export function Wallet(props: WalletProps) {
 
       // Calculate initial payment amount with default payment type
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
-      calculatePaymentAmount(minTopup, defaultPaymentType, {
-        useHupijiao: shouldRouteAlipayThroughHupijiao(
-          topupInfo,
-          defaultPaymentType
-        ),
-      })
+      calculateRoutedPaymentAmount(minTopup, defaultPaymentType)
     }
-  }, [topupInfo, topupAmount, calculatePaymentAmount])
+  }, [topupInfo, topupAmount, calculateRoutedPaymentAmount])
 
   // Get current payment type (selected or default)
   const getCurrentPaymentType = useCallback(() => {
     return selectedPaymentMethod?.type || getDefaultPaymentType(topupInfo)
   }, [selectedPaymentMethod, topupInfo])
-
-  const calculateRoutedPaymentAmount = useCallback(
-    (amount: number, paymentType: string) =>
-      calculatePaymentAmount(amount, paymentType, {
-        useHupijiao: shouldRouteAlipayThroughHupijiao(topupInfo, paymentType),
-      }),
-    [calculatePaymentAmount, topupInfo]
-  )
 
   // Handle preset selection
   const handleSelectPreset = (preset: PresetAmount) => {
@@ -331,6 +327,13 @@ export function Wallet(props: WalletProps) {
     return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
   }, [topupInfo, topupAmount])
 
+  const handleSubscriptionAvailabilityChange = useCallback(
+    (available: boolean) => {
+      setShowSubscriptionPanel(available)
+    },
+    []
+  )
+
   return (
     <>
       <SectionPageLayout>
@@ -339,13 +342,17 @@ export function Wallet(props: WalletProps) {
           {t('Manage your balance and payment methods')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4'>
+          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
             <WalletStatsCard user={user} loading={userLoading} />
 
-            <SubscriptionPlansCard topupInfo={topupInfo} />
-
-            <div className='grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.4fr)] xl:items-start'>
-              <div className='min-w-0'>
+            <div
+              className={
+                showSubscriptionPanel
+                  ? 'grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] xl:items-start'
+                  : 'grid gap-4'
+              }
+            >
+              <div id='wallet-add-funds' className='scroll-mt-4'>
                 <RechargeFormCard
                   topupInfo={topupInfo}
                   presetAmounts={presetAmounts}
@@ -365,6 +372,7 @@ export function Wallet(props: WalletProps) {
                   loading={topupLoading}
                   priceRatio={(status?.price as number) || 1}
                   usdExchangeRate={effectiveUsdExchangeRate}
+                  onOpenBilling={() => setBillingDialogOpen(true)}
                   creemProducts={topupInfo?.creem_products}
                   enableCreemTopup={topupInfo?.enable_creem_topup}
                   onCreemProductSelect={handleCreemProductSelect}
@@ -378,15 +386,18 @@ export function Wallet(props: WalletProps) {
                 />
               </div>
 
-              <div className='xl:sticky xl:top-6'>
-                <AffiliateRewardsCard
-                  user={user}
-                  affiliateLink={affiliateLink}
-                  onTransfer={() => setTransferDialogOpen(true)}
-                  loading={affiliateLoading}
-                />
-              </div>
+              <SubscriptionPlansCard
+                topupInfo={topupInfo}
+                onAvailabilityChange={handleSubscriptionAvailabilityChange}
+              />
             </div>
+
+            <AffiliateRewardsCard
+              user={user}
+              affiliateLink={affiliateLink}
+              onTransfer={() => setTransferDialogOpen(true)}
+              loading={affiliateLoading}
+            />
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

@@ -82,6 +82,12 @@ export function useSidebarData(): SidebarData {
             configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
             icon: ListTodo,
           },
+        ],
+      },
+      {
+        id: 'personal',
+        title: t('Personal'),
+        items: [
           {
             title: t('Wallet'),
             url: '/wallet',

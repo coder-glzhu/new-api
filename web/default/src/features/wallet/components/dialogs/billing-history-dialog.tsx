@@ -21,9 +21,9 @@ export function BillingHistoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-4xl'>
+      <DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col max-sm:h-dvh max-sm:w-screen max-sm:max-w-none max-sm:rounded-none max-sm:p-4 sm:max-w-4xl'>
         <DialogHeader>
-          <DialogTitle>我的订单</DialogTitle>
+          <DialogTitle>{t('Billing History')}</DialogTitle>
           <DialogDescription>
             {t('View your topup transaction records and payment history')}
           </DialogDescription>
