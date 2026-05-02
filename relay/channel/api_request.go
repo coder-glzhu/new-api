@@ -514,6 +514,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 			}()
 		}
 	}
+	service.LogRelayTiming(c, info, "relay.do_request.before_upstream", info.StartTime)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -523,6 +524,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	if resp == nil {
 		return nil, errors.New("resp is nil")
 	}
+	service.LogRelayTiming(c, info, "relay.do_request.after_upstream", info.StartTime, fmt.Sprintf("status_code=%d content_type=%q", resp.StatusCode, resp.Header.Get("Content-Type")))
 
 	_ = req.Body.Close()
 	_ = c.Request.Body.Close()

@@ -74,6 +74,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError *types.NewAPIError
 		ws          *websocket.Conn
 	)
+	stageStart := time.Now()
+	stageStart = service.LogRelayTiming(c, nil, "relay.enter", stageStart, fmt.Sprintf("relay_format=%q", relayFormat))
 
 	if relayFormat == types.RelayFormatOpenAIRealtime {
 		var err error
@@ -115,12 +117,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		return
 	}
+	stageStart = service.LogRelayTiming(c, nil, "relay.request_validated", stageStart)
 
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+	stageStart = service.LogRelayTiming(c, relayInfo, "relay.relay_info_ready", stageStart)
 
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
 	needCountToken := constant.CountToken
@@ -146,6 +150,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeCountTokenFailed)
 		return
 	}
+	stageStart = service.LogRelayTiming(c, relayInfo, "relay.token_estimated", stageStart, fmt.Sprintf("prompt_tokens=%d", tokens))
 
 	relayInfo.SetEstimatePromptTokens(tokens)
 
@@ -154,6 +159,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 		return
 	}
+	stageStart = service.LogRelayTiming(c, relayInfo, "relay.price_ready", stageStart, fmt.Sprintf("quota_to_pre_consume=%d", priceData.QuotaToPreConsume))
 
 	// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
 
@@ -165,6 +171,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			return
 		}
 	}
+	stageStart = service.LogRelayTiming(c, relayInfo, "relay.pre_consume_done", stageStart, fmt.Sprintf("pre_consumed=%d", relayInfo.FinalPreConsumedQuota))
 
 	defer func() {
 		// Only return quota if downstream failed and quota was actually pre-consumed
@@ -188,12 +195,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
+		stageStart = service.LogRelayTiming(c, relayInfo, "relay.retry_begin", stageStart, fmt.Sprintf("retry=%d", relayInfo.RetryIndex))
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
 			logger.LogError(c, channelErr.Error())
 			newAPIError = channelErr
 			break
 		}
+		stageStart = service.LogRelayTiming(c, relayInfo, "relay.channel_selected", stageStart, fmt.Sprintf("channel_id=%d channel_type=%d", channel.Id, channel.Type))
 
 		addUsedChannel(c, channel.Id)
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
@@ -218,6 +227,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		default:
 			newAPIError = relayHandler(c, relayInfo)
 		}
+		stageStart = service.LogRelayTiming(c, relayInfo, "relay.handler_finished", stageStart)
 
 		if newAPIError == nil {
 			relayInfo.LastError = nil
