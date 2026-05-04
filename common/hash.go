@@ -2,6 +2,7 @@ package common
 
 import (
 	"crypto/hmac"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
@@ -31,4 +32,10 @@ func HmacSha256Raw(message, key []byte) []byte {
 
 func HmacSha256(message, key string) string {
 	return hex.EncodeToString(HmacSha256Raw([]byte(message), []byte(key)))
+}
+
+func Md5(data []byte) string {
+	h := md5.New()
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
 }

@@ -98,3 +98,10 @@ func isEpayWebhookConfigured() bool {
 func isEpayWebhookEnabled() bool {
 	return isEpayTopUpEnabled()
 }
+
+func isHupijiaoTopUpEnabled() bool {
+	return setting.HupijiaoEnabled &&
+		strings.TrimSpace(setting.HupijiaoAppId) != "" &&
+		strings.TrimSpace(setting.HupijiaoAppSecret) != "" &&
+		strings.TrimSpace(setting.HupijiaoApiUrl) != ""
+}

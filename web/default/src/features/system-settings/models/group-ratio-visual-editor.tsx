@@ -58,6 +58,8 @@ type GroupOverride = {
   ratio: number
 }
 
+const stringifyJson = (value: unknown) => JSON.stringify(value, null, 2)
+
 export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   groupRatio,
   topupGroupRatio,
@@ -186,6 +188,21 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
     const field =
       simpleDialogType === 'groupRatio' ? 'GroupRatio' : 'TopupGroupRatio'
     onChange(field, JSON.stringify(map, null, 2))
+
+    if (simpleDialogType === 'groupRatio' && !simpleEditData) {
+      const usableMap = safeJsonParse<Record<string, string>>(
+        userUsableGroups,
+        {
+          fallback: {},
+          silent: true,
+        }
+      )
+      if (!Object.prototype.hasOwnProperty.call(usableMap, name)) {
+        usableMap[name] = name
+        onChange('UserUsableGroups', stringifyJson(usableMap))
+      }
+    }
+
     setSimpleDialogOpen(false)
   }
 
@@ -202,6 +219,18 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
 
     const field = type === 'groupRatio' ? 'GroupRatio' : 'TopupGroupRatio'
     onChange(field, JSON.stringify(map, null, 2))
+
+    if (type === 'groupRatio') {
+      const usableMap = safeJsonParse<Record<string, string>>(
+        userUsableGroups,
+        {
+          fallback: {},
+          silent: true,
+        }
+      )
+      delete usableMap[name]
+      onChange('UserUsableGroups', stringifyJson(usableMap))
+    }
   }
 
   // Usable groups handlers
@@ -227,7 +256,17 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
 
     map[name] = description
 
-    onChange('UserUsableGroups', JSON.stringify(map, null, 2))
+    onChange('UserUsableGroups', stringifyJson(map))
+
+    const ratioMap = safeJsonParse<Record<string, number>>(groupRatio, {
+      fallback: {},
+      silent: true,
+    })
+    if (!Object.prototype.hasOwnProperty.call(ratioMap, name)) {
+      ratioMap[name] = 1
+      onChange('GroupRatio', stringifyJson(ratioMap))
+    }
+
     setUsableDialogOpen(false)
   }
 

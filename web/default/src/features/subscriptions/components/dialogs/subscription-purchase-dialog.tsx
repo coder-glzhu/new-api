@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { GroupBadge } from '@/components/group-badge'
 import { Separator } from '@/components/ui/separator'
 import { HupijiaoPaymentDialog } from '@/components/payment/hupijiao-payment-dialog'
 import {

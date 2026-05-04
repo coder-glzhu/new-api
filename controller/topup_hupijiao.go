@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,6 +36,27 @@ type HupijiaoPayResponse struct {
 }
 
 const hupijiaoPaymentExpireSeconds int64 = 3 * 60
+
+func resolveHupijiaoApiURL() string {
+	if strings.TrimSpace(setting.HupijiaoApiUrl) != "" {
+		return strings.TrimSpace(setting.HupijiaoApiUrl)
+	}
+	return "https://api.xunhupay.com/payment/do.html"
+}
+
+func resolveHupijiaoNotifyURL() string {
+	if strings.TrimSpace(setting.HupijiaoNotifyUrl) != "" {
+		return strings.TrimSpace(setting.HupijiaoNotifyUrl)
+	}
+	return strings.TrimRight(system_setting.ServerAddress, "/") + "/api/hupijiao/webhook"
+}
+
+func resolveHupijiaoReturnURL() string {
+	if strings.TrimSpace(setting.HupijiaoReturnUrl) != "" {
+		return strings.TrimSpace(setting.HupijiaoReturnUrl)
+	}
+	return strings.TrimRight(system_setting.ServerAddress, "/") + "/console/topup?show_history=true"
+}
 
 // generateHupijiaoSignature 生成虎皮椒签名
 // 参数字典序排序 + MD5(stringA + APPSECRET)
@@ -169,8 +191,8 @@ func createHupijiaoPayment(tradeNo string, amount float64, username string) (pay
 		"total_fee":      fmt.Sprintf("%.2f", amount),
 		"title":          fmt.Sprintf("充值 - %s", username),
 		"time":           timestamp,
-		"notify_url":     setting.HupijiaoNotifyUrl,
-		"return_url":     setting.HupijiaoReturnUrl,
+		"notify_url":     resolveHupijiaoNotifyURL(),
+		"return_url":     resolveHupijiaoReturnURL(),
 		"nonce_str":      nonceStr,
 	}
 
@@ -186,7 +208,7 @@ func createHupijiaoPayment(tradeNo string, amount float64, username string) (pay
 
 	// 发送POST请求
 	client := service.GetHttpClient()
-	req, err := http.NewRequest("POST", setting.HupijiaoApiUrl, bytes.NewReader(jsonData))
+	req, err := http.NewRequest("POST", resolveHupijiaoApiURL(), bytes.NewReader(jsonData))
 	if err != nil {
 		return "", "", "", fmt.Errorf("创建请求失败: %w", err)
 	}

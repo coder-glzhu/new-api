@@ -88,17 +88,17 @@ export function SubscriptionPlansCard({
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
 
   const enableStripe = !!status?.enable_stripe_topup
-  const enableCreem = !!props.topupInfo?.enable_creem_topup
+  const enableCreem = !!topupInfo?.enable_creem_topup
   const alipayMethod = useMemo(
-    () => props.topupInfo?.pay_methods?.find((m) => m.type === 'alipay'),
-    [props.topupInfo?.pay_methods]
+    () => topupInfo?.pay_methods?.find((m) => m.type === 'alipay'),
+    [topupInfo?.pay_methods]
   )
   const enableHupijiao =
-    !!props.topupInfo?.enable_hupijiao_topup && !!alipayMethod
+    !!topupInfo?.enable_hupijiao_topup && !!alipayMethod
   const enableOnlineTopUp = !!status?.enable_online_topup
   const epayMethods = useMemo(
-    () => getEpayMethods(props.topupInfo?.pay_methods, enableHupijiao),
-    [props.topupInfo?.pay_methods, enableHupijiao]
+    () => getEpayMethods(topupInfo?.pay_methods, enableHupijiao),
+    [topupInfo?.pay_methods, enableHupijiao]
   )
 
   const fetchPlans = useCallback(async () => {
