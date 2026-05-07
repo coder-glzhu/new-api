@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -777,7 +778,25 @@ func RechargeByHupijiao(tradeNo string, amount float64) error {
 
 	if quotaToAdd > 0 {
 		RecordTopupLog(topUp.UserId, fmt.Sprintf("虎皮椒充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money), "", topUp.PaymentMethod, PaymentMethodHupijiao)
+		UpgradeUserGroupOnTopup(topUp.UserId)
 	}
 
 	return nil
+}
+
+// UpgradeUserGroupOnTopup upgrades the user to the configured topup upgrade group (default "vip")
+// if the user is not already in that group. Called after any successful topup.
+func UpgradeUserGroupOnTopup(userId int) {
+	upgradeGroup := strings.TrimSpace(setting.TopupUpgradeGroup)
+	if upgradeGroup == "" {
+		upgradeGroup = "vip"
+	}
+	groupCol := "`group`"
+	if common.UsingPostgreSQL {
+		groupCol = `"group"`
+	}
+	if err := DB.Model(&User{}).Where("id = ? AND "+groupCol+" <> ?", userId, upgradeGroup).
+		Update("group", upgradeGroup).Error; err != nil {
+		common.SysError(fmt.Sprintf("failed to upgrade user %d group to %s: %v", userId, upgradeGroup, err))
+	}
 }

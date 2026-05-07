@@ -125,6 +125,7 @@ func InitOptionMap() {
 	common.OptionMap["HupijiaoNotifyUrl"] = setting.HupijiaoNotifyUrl
 	common.OptionMap["HupijiaoReturnUrl"] = setting.HupijiaoReturnUrl
 	common.OptionMap["HupijiaoMinTopUp"] = strconv.Itoa(setting.HupijiaoMinTopUp)
+	common.OptionMap["TopupUpgradeGroup"] = setting.TopupUpgradeGroup
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -464,6 +465,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.HupijiaoReturnUrl = value
 	case "HupijiaoMinTopUp":
 		setting.HupijiaoMinTopUp, _ = strconv.Atoi(value)
+	case "TopupUpgradeGroup":
+		setting.TopupUpgradeGroup = strings.TrimSpace(value)
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
