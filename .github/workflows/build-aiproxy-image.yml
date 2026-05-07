@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  IMAGE_NAME: ghcr.io/coder-glzhu/new-api
+  IMAGE_NAME: ghcr.io/zhuguoliang1014/new-api
 
 jobs:
   docker:
