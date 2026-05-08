@@ -27,6 +27,10 @@ interface DateTimePickerProps {
   onChange?: (date: Date | undefined) => void
   placeholder?: string
   className?: string
+  /** Earliest selectable date (inclusive). Dates strictly before this are disabled. */
+  minDate?: Date
+  /** Latest selectable date (inclusive). Dates strictly after this are disabled. */
+  maxDate?: Date
 }
 
 export function DateTimePicker({
@@ -34,6 +38,8 @@ export function DateTimePicker({
   onChange,
   placeholder,
   className,
+  minDate,
+  maxDate,
 }: DateTimePickerProps) {
   const { t, i18n } = useTranslation()
   const placeholderText = placeholder ?? t('Select date')
@@ -116,6 +122,30 @@ export function DateTimePicker({
             captionLayout='dropdown'
             onSelect={handleDateSelect}
             locale={calendarLocale}
+            disabled={[
+              ...(minDate
+                ? [
+                    {
+                      before: new Date(
+                        minDate.getFullYear(),
+                        minDate.getMonth(),
+                        minDate.getDate()
+                      ),
+                    },
+                  ]
+                : []),
+              ...(maxDate
+                ? [
+                    {
+                      after: new Date(
+                        maxDate.getFullYear(),
+                        maxDate.getMonth(),
+                        maxDate.getDate()
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
           />
         </PopoverContent>
       </Popover>

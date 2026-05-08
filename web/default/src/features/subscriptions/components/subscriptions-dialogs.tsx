@@ -1,5 +1,5 @@
 import { ToggleStatusDialog } from './dialogs/toggle-status-dialog'
-import { SubscriptionsMutateDrawer } from './subscriptions-mutate-drawer'
+import { SubscriptionCreateDrawer } from './subscription-create-drawer'
 import { useSubscriptions } from './subscriptions-provider'
 
 export function SubscriptionsDialogs() {
@@ -8,7 +8,7 @@ export function SubscriptionsDialogs() {
 
   return (
     <>
-      <SubscriptionsMutateDrawer
+      <SubscriptionCreateDrawer
         open={open === 'create' || isUpdate}
         onOpenChange={(isOpen) => !isOpen && setOpen(null)}
         currentRow={isUpdate ? currentRow || undefined : undefined}

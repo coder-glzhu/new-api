@@ -46,6 +46,10 @@ func SubscriptionRequestHupijiao(c *gin.Context) {
 		common.ApiErrorMsg(c, "套餐已下架")
 		return
 	}
+	if msg := saleWindowErrorMessage(plan); msg != "" {
+		common.ApiErrorMsg(c, msg)
+		return
+	}
 
 	if plan.MaxPurchasePerUser > 0 {
 		count, err := model.CountUserSubscriptionsByPlan(userId, plan.Id)

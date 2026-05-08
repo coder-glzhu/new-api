@@ -25,13 +25,9 @@ export function AffiliateRewardsCard({
   if (loading) {
     return (
       <Card className='bg-muted/20 py-0'>
-        <CardContent className='grid gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,0.72fr)_minmax(320px,1.15fr)] lg:items-center'>
-          <div>
-            <Skeleton className='h-5 w-32' />
-            <Skeleton className='mt-2 h-4 w-48' />
-          </div>
-          <Skeleton className='h-14 rounded-lg' />
-          <Skeleton className='h-10 rounded-lg' />
+        <CardContent className='flex flex-col gap-3 p-3 sm:p-4'>
+          <Skeleton className='h-8 w-full' />
+          <Skeleton className='h-8 w-full' />
         </CardContent>
       </Card>
     )
@@ -41,40 +37,39 @@ export function AffiliateRewardsCard({
 
   return (
     <Card className='bg-muted/20 py-0'>
-      <CardContent className='grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(200px,1fr)_minmax(180px,0.65fr)_minmax(280px,1fr)] lg:items-center'>
-        <div className='flex min-w-0 items-center gap-2.5'>
+      <CardContent className='flex flex-col gap-3 p-3 sm:p-4'>
+        {/* 标题行 + 统计数字 */}
+        <div className='flex items-center gap-2.5'>
           <div className='bg-background flex size-8 shrink-0 items-center justify-center rounded-lg border'>
             <Share2 className='text-muted-foreground size-4' />
           </div>
-          <div className='min-w-0'>
-            <h3 className='truncate text-sm font-semibold'>
-              {t('Referral Program')}
-            </h3>
+          <div className='min-w-0 flex-1'>
+            <h3 className='text-sm font-semibold'>{t('Referral Program')}</h3>
             <p className='text-muted-foreground line-clamp-1 text-xs'>
               {t(
                 'Earn rewards when your referrals add funds. Transfer accumulated rewards to your balance anytime.'
               )}
             </p>
           </div>
+          <div className='flex shrink-0 gap-3 text-center'>
+            {[
+              [t('Pending'), formatQuota(user?.aff_quota ?? 0)],
+              [t('Total Earned'), formatQuota(user?.aff_history_quota ?? 0)],
+              [t('Invites'), String(user?.aff_count ?? 0)],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <div className='text-muted-foreground text-[10px] font-medium tracking-wider uppercase'>
+                  {label}
+                </div>
+                <div className='mt-0.5 text-sm font-semibold tabular-nums'>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className='grid grid-cols-3 gap-1.5 text-center'>
-          {[
-            [t('Pending'), formatQuota(user?.aff_quota ?? 0)],
-            [t('Total Earned'), formatQuota(user?.aff_history_quota ?? 0)],
-            [t('Invites'), String(user?.aff_count ?? 0)],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <div className='text-muted-foreground truncate text-[10px] font-medium tracking-wider uppercase'>
-                {label}
-              </div>
-              <div className='mt-0.5 truncate text-sm font-semibold tabular-nums'>
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
-
+        {/* 推荐链接 */}
         <div className='flex items-center gap-2'>
           <Input
             value={affiliateLink}

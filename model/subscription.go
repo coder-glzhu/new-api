@@ -182,8 +182,41 @@ type SubscriptionPlan struct {
 	QuotaResetPeriod        string `json:"quota_reset_period" gorm:"type:varchar(16);default:'never'"`
 	QuotaResetCustomSeconds int64  `json:"quota_reset_custom_seconds" gorm:"type:bigint;default:0"`
 
+	// Sale window (Unix timestamps, 0 = no restriction)
+	StartsAt  int64 `json:"starts_at"  gorm:"type:bigint;not null;default:0"`
+	ExpiresAt int64 `json:"expires_at" gorm:"type:bigint;not null;default:0"`
+
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
+}
+
+// IsWithinSaleWindow returns true if the plan is currently purchasable based on its time window.
+// A zero value for either bound means no restriction on that side.
+func (p *SubscriptionPlan) IsWithinSaleWindow() bool {
+	ok, _ := p.CheckSaleWindow()
+	return ok
+}
+
+// SaleWindowStatus represents the current state of a plan's sale window.
+type SaleWindowStatus int
+
+const (
+	SaleWindowOpen      SaleWindowStatus = iota // 正在销售
+	SaleWindowNotYet                            // 未到开售时间
+	SaleWindowEnded                             // 已过结束时间
+)
+
+// CheckSaleWindow reports whether the plan is currently purchasable.
+// When not purchasable, it also returns the reason so the caller can produce a specific error message.
+func (p *SubscriptionPlan) CheckSaleWindow() (bool, SaleWindowStatus) {
+	now := time.Now().Unix()
+	if p.StartsAt > 0 && now < p.StartsAt {
+		return false, SaleWindowNotYet
+	}
+	if p.ExpiresAt > 0 && now >= p.ExpiresAt {
+		return false, SaleWindowEnded
+	}
+	return true, SaleWindowOpen
 }
 
 func (p *SubscriptionPlan) BeforeCreate(tx *gorm.DB) error {

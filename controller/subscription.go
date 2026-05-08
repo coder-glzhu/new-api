@@ -11,6 +11,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// saleWindowErrorMessage returns a user-facing message for a non-purchasable plan based on
+// its sale window status. Returns empty string when the plan is open for purchase.
+func saleWindowErrorMessage(plan *model.SubscriptionPlan) string {
+	ok, status := plan.CheckSaleWindow()
+	if ok {
+		return ""
+	}
+	switch status {
+	case model.SaleWindowNotYet:
+		return "套餐尚未开售，请在开售时间后再试"
+	case model.SaleWindowEnded:
+		return "套餐促销已结束，无法下单"
+	default:
+		return "套餐不在销售时间范围内"
+	}
+}
+
 // ---- Shared types ----
 
 type SubscriptionPlanDTO struct {
@@ -263,6 +280,8 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 			"upgrade_group":              req.Plan.UpgradeGroup,
 			"quota_reset_period":         req.Plan.QuotaResetPeriod,
 			"quota_reset_custom_seconds": req.Plan.QuotaResetCustomSeconds,
+			"starts_at":                  req.Plan.StartsAt,
+			"expires_at":                 req.Plan.ExpiresAt,
 			"updated_at":                 common.GetTimestamp(),
 		}
 		if err := tx.Model(&model.SubscriptionPlan{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {
