@@ -14,12 +14,14 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { HupijiaoPaymentDialog } from '@/components/payment/hupijiao-payment-dialog'
+import { GroupBadge } from '@/components/group-badge'
 import {
   paySubscriptionStripe,
   paySubscriptionCreem,
@@ -80,8 +82,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
     props.enableOnlineTopUp && (props.epayMethods || []).length > 0
   const hasAnyPayment = hasStripe || hasCreem || hasHupijiao || hasEpay
   const hasNonHupijiaoPayment = hasStripe || hasCreem || hasEpay
+  const selectedEpayMethodLabel =
+    (props.epayMethods || []).find((m) => m.type === selectedEpayMethod)
+      ?.name ||
+    selectedEpayMethod ||
+    t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
-  const totalAmountUSD = Number(props.plan?.total_amount_usd || 0)
   const price = Number(plan.price_amount || 0).toFixed(2)
   const displayPriceCNY = formatCnyCurrencyAmount(priceCNY, {
     digitsLarge: 2,
@@ -221,7 +227,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
   return (
     <>
       <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-        <DialogContent className='sm:max-w-md'>
+        <DialogContent className='max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
           <DialogHeader>
             <DialogTitle className='flex items-center gap-2'>
               <Crown className='h-5 w-5' />
@@ -229,8 +235,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
             </DialogTitle>
           </DialogHeader>
 
-          <div className='space-y-4'>
-            <div className='bg-muted/50 space-y-3 rounded-lg border p-4'>
+          <div className='space-y-3 sm:space-y-4'>
+            <div className='bg-muted/50 space-y-2.5 rounded-lg border p-3 sm:space-y-3 sm:p-4'>
               <div className='flex justify-between'>
                 <span className='text-muted-foreground text-sm'>
                   {t('Plan Name')}
@@ -260,24 +266,17 @@ export function SubscriptionPurchaseDialog(props: Props) {
                 <span className='text-muted-foreground text-sm'>
                   {t('Total Quota')}
                 </span>
-                {totalAmount > 0 ? (
-                  <span className='flex items-center gap-1 text-sm'>
-                    <Package className='h-3.5 w-3.5' />
-                    <span>{totalAmount}</span>
-                    <span className='text-muted-foreground'>
-                      ≈ ${totalAmountUSD.toFixed(2)}
-                    </span>
-                  </span>
-                ) : (
-                  <span className='text-sm'>{t('Unlimited')}</span>
-                )}
+                <span className='flex items-center gap-1 text-sm'>
+                  <Package className='h-3.5 w-3.5' />
+                  {totalAmount > 0 ? totalAmount : t('Unlimited')}
+                </span>
               </div>
               {plan.upgrade_group && (
-                <div className='flex justify-between'>
+                <div className='flex items-center justify-between'>
                   <span className='text-muted-foreground text-sm'>
                     {t('Upgrade Group')}
                   </span>
-                  <span className='text-sm'>{plan.upgrade_group}</span>
+                  <GroupBadge group={plan.upgrade_group} />
                 </div>
               )}
               <Separator />
@@ -304,10 +303,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   {t('Select payment method')}
                 </p>
                 {(hasStripe || hasCreem || hasHupijiao) && (
-                  <div className='grid gap-2 sm:grid-cols-3'>
+                  <div className='grid grid-cols-2 gap-2 sm:flex'>
                     {hasStripe && (
                       <Button
                         variant='outline'
+                        className='flex-1'
                         onClick={handlePayStripe}
                         disabled={paying || limitReached}
                       >
@@ -317,6 +317,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     {hasCreem && (
                       <Button
                         variant='outline'
+                        className='flex-1'
                         onClick={handlePayCreem}
                         disabled={paying || limitReached}
                       >
@@ -326,6 +327,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     {hasHupijiao && (
                       <Button
                         variant='outline'
+                        className='flex-1'
                         onClick={handlePayHupijiao}
                         disabled={paying || limitReached}
                       >
@@ -335,21 +337,31 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   </div>
                 )}
                 {hasEpay && (
-                  <div className='flex gap-2'>
+                  <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
                     <Select
+                      items={[
+                        ...(props.epayMethods || []).map((m) => ({
+                          value: m.type,
+                          label: m.name || m.type,
+                        })),
+                      ]}
                       value={selectedEpayMethod}
-                      onValueChange={setSelectedEpayMethod}
+                      onValueChange={(v) =>
+                        v !== null && setSelectedEpayMethod(v)
+                      }
                       disabled={limitReached}
                     >
                       <SelectTrigger className='flex-1'>
-                        <SelectValue placeholder={t('Select payment method')} />
+                        <SelectValue>{selectedEpayMethodLabel}</SelectValue>
                       </SelectTrigger>
-                      <SelectContent>
-                        {(props.epayMethods || []).map((m) => (
-                          <SelectItem key={m.type} value={m.type}>
-                            {m.name || m.type}
-                          </SelectItem>
-                        ))}
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {(props.epayMethods || []).map((m) => (
+                            <SelectItem key={m.type} value={m.type}>
+                              {m.name || m.type}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                     <Button

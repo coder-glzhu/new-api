@@ -131,6 +131,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"hupijiao_min_topup":      setting.HupijiaoMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
+		"topup_link":              common.TopUpLink,
 	}
 	common.ApiSuccess(c, data)
 }

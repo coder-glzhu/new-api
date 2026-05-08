@@ -1,4 +1,5 @@
 {
+  "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.",
   "Enable Alipay checkout for wallet and subscriptions": "Enable Alipay checkout for wallet and subscriptions",
   "Leave blank to use the default webhook URL": "Leave blank to use the default webhook URL",
   "Leave callback URLs blank to let the backend use the server address when supported.": "Leave callback URLs blank to let the backend use the server address when supported.",
