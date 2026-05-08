@@ -33,9 +33,10 @@ func saleWindowErrorMessage(plan *model.SubscriptionPlan) string {
 type SubscriptionPlanDTO struct {
 	Plan           model.SubscriptionPlan `json:"plan"`
 	TotalAmountUSD float64                `json:"total_amount_usd"`
+	SoldCount      int64                  `json:"sold_count"`
 }
 
-func newSubscriptionPlanDTO(plan model.SubscriptionPlan) SubscriptionPlanDTO {
+func newSubscriptionPlanDTO(plan model.SubscriptionPlan, soldCount int64) SubscriptionPlanDTO {
 	totalAmountUSD := 0.0
 	if plan.TotalAmount > 0 && common.QuotaPerUnit > 0 {
 		totalAmountUSD = float64(plan.TotalAmount) / common.QuotaPerUnit
@@ -43,7 +44,42 @@ func newSubscriptionPlanDTO(plan model.SubscriptionPlan) SubscriptionPlanDTO {
 	return SubscriptionPlanDTO{
 		Plan:           plan,
 		TotalAmountUSD: totalAmountUSD,
+		SoldCount:      soldCount,
 	}
+}
+
+func buildSubscriptionPlanDTOs(plans []model.SubscriptionPlan) ([]SubscriptionPlanDTO, error) {
+	planIds := make([]int, 0, len(plans))
+	for _, p := range plans {
+		if p.Id > 0 {
+			planIds = append(planIds, p.Id)
+		}
+	}
+
+	soldCounts := map[int]int64{}
+	if len(planIds) > 0 {
+		var rows []struct {
+			PlanId    int   `gorm:"column:plan_id"`
+			SoldCount int64 `gorm:"column:sold_count"`
+		}
+		err := model.DB.Model(&model.UserSubscription{}).
+			Select("plan_id, COUNT(*) as sold_count").
+			Where("plan_id IN ? AND status <> ?", planIds, "cancelled").
+			Group("plan_id").
+			Scan(&rows).Error
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			soldCounts[row.PlanId] = row.SoldCount
+		}
+	}
+
+	result := make([]SubscriptionPlanDTO, 0, len(plans))
+	for _, p := range plans {
+		result = append(result, newSubscriptionPlanDTO(p, soldCounts[p.Id]))
+	}
+	return result, nil
 }
 
 type BillingPreferenceRequest struct {
@@ -58,9 +94,10 @@ func GetSubscriptionPlans(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	result := make([]SubscriptionPlanDTO, 0, len(plans))
-	for _, p := range plans {
-		result = append(result, newSubscriptionPlanDTO(p))
+	result, err := buildSubscriptionPlanDTOs(plans)
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	common.ApiSuccess(c, result)
 }
@@ -121,9 +158,10 @@ func AdminListSubscriptionPlans(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	result := make([]SubscriptionPlanDTO, 0, len(plans))
-	for _, p := range plans {
-		result = append(result, newSubscriptionPlanDTO(p))
+	result, err := buildSubscriptionPlanDTOs(plans)
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	common.ApiSuccess(c, result)
 }

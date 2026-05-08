@@ -67,6 +67,20 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         size: 100,
       },
       {
+        accessorFn: (row) => row.sold_count || 0,
+        id: 'sold_count',
+        meta: { label: t('Sold'), mobileHidden: true },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title={t('Sold')} />
+        ),
+        cell: ({ row }) => (
+          <span className='text-muted-foreground tabular-nums'>
+            {t('Sold {{count}}', { count: row.original.sold_count || 0 })}
+          </span>
+        ),
+        size: 100,
+      },
+      {
         id: 'duration',
         meta: { label: t('Validity') },
         header: ({ column }) => (

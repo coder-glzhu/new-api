@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarClock, Check, Clock, Crown, Sparkles } from 'lucide-react'
+import {
+  CalendarClock,
+  Check,
+  Clock,
+  Crown,
+  Flame,
+  Sparkles,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useCountdown } from '@/features/subscriptions/lib/useCountdown'
 import { formatCnyCurrencyAmount } from '@/lib/currency'
@@ -53,14 +60,55 @@ function formatCountdownText(remaining: number): string {
   return days > 0 ? `${days}d ${h}:${m}:${s}` : `${h}:${m}:${s}`
 }
 
+function getSaleWindowDays(startsAt: number, expiresAt: number): number | null {
+  if (expiresAt <= 0) return null
+  const base = startsAt > 0 ? startsAt : Math.floor(Date.now() / 1000)
+  const seconds = expiresAt - base
+  if (seconds <= 0) return null
+  return Math.max(1, Math.ceil(seconds / 86400))
+}
+
+function SaleWindowBadge({
+  startsAt,
+  expiresAt,
+}: {
+  startsAt: number
+  expiresAt: number
+}) {
+  const { t } = useTranslation()
+  const endRemaining = useCountdown(expiresAt)
+  const saleDays = getSaleWindowDays(startsAt, expiresAt)
+
+  if (!saleDays || expiresAt <= 0) return null
+  if (endRemaining <= 0) return null
+
+  return (
+    <StatusBadge variant='orange' copyable={false} className='shrink-0'>
+      <Flame className='h-3 w-3' />
+      {t('Limited {{days}}-day sale', { days: saleDays })}
+    </StatusBadge>
+  )
+}
+
+function SoldCountChip({ count }: { count: number }) {
+  const { t } = useTranslation()
+
+  return (
+    <span className='text-muted-foreground inline-flex shrink-0 items-center gap-1 text-[11px] tabular-nums'>
+      <Flame className='h-3 w-3 text-orange-500/80' />
+      {t('Sold {{count}}', { count })}
+    </span>
+  )
+}
+
 // 单个按钮组件，内部用 useCountdown 驱动全部状态切换，无需父组件重渲染
 function PlanActionButton({
   startsAt,
   expiresAt,
   onClick,
 }: {
-  startsAt: number   // 0 = 无限制
-  expiresAt: number  // 0 = 无限制
+  startsAt: number // 0 = 无限制
+  expiresAt: number // 0 = 无限制
   onClick: () => void
 }) {
   const { t } = useTranslation()
@@ -244,6 +292,7 @@ export function SubscriptionPlansCard({
 
               const startsAt = Number(plan.starts_at || 0)
               const expiresAt = Number(plan.expires_at || 0)
+              const soldCount = Number(p.sold_count || 0)
 
               const benefits = [
                 `${t('Validity Period')}: ${formatDuration(plan, t)}`,
@@ -279,22 +328,29 @@ export function SubscriptionPlansCard({
                           </p>
                         )}
                       </div>
-                      {isPopular && (
-                        <StatusBadge
-                          variant='info'
-                          copyable={false}
-                          className='shrink-0'
-                        >
-                          <Sparkles className='h-3 w-3' />
-                          {t('Recommended')}
-                        </StatusBadge>
-                      )}
+                      <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1'>
+                        <SaleWindowBadge
+                          startsAt={startsAt}
+                          expiresAt={expiresAt}
+                        />
+                        {isPopular && (
+                          <StatusBadge
+                            variant='info'
+                            copyable={false}
+                            className='shrink-0'
+                          >
+                            <Sparkles className='h-3 w-3' />
+                            {t('Recommended')}
+                          </StatusBadge>
+                        )}
+                      </div>
                     </div>
 
-                    <div className='py-2'>
-                      <span className='text-primary text-2xl font-bold'>
+                    <div className='flex items-end justify-between gap-2 py-2'>
+                      <span className='text-primary text-2xl font-bold tracking-tight'>
                         {displayPrice}
                       </span>
+                      <SoldCountChip count={soldCount} />
                     </div>
 
                     <div className='flex-1 space-y-1.5 pb-3'>
