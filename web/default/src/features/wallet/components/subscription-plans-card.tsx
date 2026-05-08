@@ -317,33 +317,33 @@ export function SubscriptionPlansCard({
                   )}
                 >
                   <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
-                    <div className='mb-2 flex items-start justify-between gap-3'>
-                      <div className='min-w-0'>
-                        <h4 className='truncate font-semibold'>
+                    <div className='mb-2 space-y-1'>
+                      <div className='flex items-center justify-between gap-3'>
+                        <h4 className='min-w-0 truncate font-semibold'>
                           {plan.title || t('Subscription Plans')}
                         </h4>
-                        {plan.subtitle && (
-                          <p className='text-muted-foreground truncate text-xs'>
-                            {plan.subtitle}
-                          </p>
-                        )}
+                        <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1'>
+                          <SaleWindowBadge
+                            startsAt={startsAt}
+                            expiresAt={expiresAt}
+                          />
+                          {isPopular && (
+                            <StatusBadge
+                              variant='info'
+                              copyable={false}
+                              className='shrink-0'
+                            >
+                              <Sparkles className='h-3 w-3' />
+                              {t('Recommended')}
+                            </StatusBadge>
+                          )}
+                        </div>
                       </div>
-                      <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1'>
-                        <SaleWindowBadge
-                          startsAt={startsAt}
-                          expiresAt={expiresAt}
-                        />
-                        {isPopular && (
-                          <StatusBadge
-                            variant='info'
-                            copyable={false}
-                            className='shrink-0'
-                          >
-                            <Sparkles className='h-3 w-3' />
-                            {t('Recommended')}
-                          </StatusBadge>
-                        )}
-                      </div>
+                      {plan.subtitle && (
+                        <p className='text-muted-foreground truncate text-xs'>
+                          {plan.subtitle}
+                        </p>
+                      )}
                     </div>
 
                     <div className='flex items-end justify-between gap-2 py-2'>
