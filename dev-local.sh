@@ -24,6 +24,9 @@ export SQL_DSN="${SQL_DSN:-postgresql://$(whoami)@localhost:5432/new-api?sslmode
 export SESSION_SECRET="${SESSION_SECRET:-249aec5efa2c89c35237782551c3c422b6e51af2797c4873d99621abfea68de7}"
 export PORT="${BACKEND_PORT}"
 export VITE_REACT_APP_SERVER_URL="http://localhost:${BACKEND_PORT}"
+export GOCACHE="${GOCACHE:-${ROOT_DIR}/.gocache}"
+export GOTMPDIR="${GOTMPDIR:-${ROOT_DIR}/.gocache-temp}"
+mkdir -p "${GOCACHE}" "${GOTMPDIR}"
 
 # ---- 颜色 ----
 RED=$'\033[31m'
@@ -48,6 +51,7 @@ if [ ! -x "${AIR_BIN}" ]; then
   GO111MODULE=on go install github.com/air-verse/air@latest
 fi
 [ -x "${AIR_BIN}" ] || die "air 安装失败，请手动检查"
+[ -f "${ROOT_DIR}/.air.toml" ] || die "缺少 ${ROOT_DIR}/.air.toml，无法启动后端热重载"
 
 if [ ! -d "${FRONTEND_DIR}/node_modules" ]; then
   log "前端 node_modules 缺失，执行 bun install ..."

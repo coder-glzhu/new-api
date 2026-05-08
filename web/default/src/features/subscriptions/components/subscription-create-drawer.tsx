@@ -98,15 +98,15 @@ export function SubscriptionCreateDrawer({
 
   const durationUnit = form.watch('duration_unit')
   const resetPeriod = form.watch('quota_reset_period')
-  const priceAmount = form.watch('price_amount')
+  const usdQuotaAmount = form.watch('price_amount')
   const startsAt = form.watch('starts_at')
   const expiresAt = form.watch('expires_at')
 
   // 美元 × quotaPerUnit 自动折算的预览值
   const autoTotalQuota = useMemo(() => {
-    const v = Number(priceAmount || 0)
+    const v = Number(usdQuotaAmount || 0)
     return Math.round(v * quotaPerUnit)
-  }, [priceAmount, quotaPerUnit])
+  }, [usdQuotaAmount, quotaPerUnit])
 
   // 日期选择的最小可选日期（今天零点）
   const todayStart = useMemo(() => {
@@ -306,8 +306,10 @@ export function SubscriptionCreateDrawer({
                   control={form.control}
                   name='price_amount'
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Price (USD)')}</FormLabel>
+                    <FormItem className='grid grid-rows-[1.25rem_auto_auto] gap-2'>
+                      <FormLabel className='h-5 leading-5'>
+                        {t('USD Quota Amount')}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -320,9 +322,9 @@ export function SubscriptionCreateDrawer({
                           }
                         />
                       </FormControl>
-                      <FormDescription>
+                      <FormDescription className='min-h-12 leading-6'>
                         {t(
-                          'Enter USD price. Quota is auto-calculated by system rate.'
+                          'Enter the USD quota amount. Quota is auto-calculated by system rate.'
                         )}
                       </FormDescription>
                       <FormMessage />
@@ -330,6 +332,38 @@ export function SubscriptionCreateDrawer({
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name='price_cny'
+                  render={({ field }) => (
+                    <FormItem className='grid grid-rows-[1.25rem_auto_auto] gap-2'>
+                      <FormLabel className='h-5 leading-5'>
+                        {t('Price (CNY)')}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          step='0.01'
+                          min={0.01}
+                          placeholder='0.00'
+                          onChange={(e) =>
+                            field.onChange(parseFloat(e.target.value) || 0)
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription className='min-h-12 leading-6'>
+                        {t(
+                          'Used for CNY payment channels. Must be greater than 0.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
                   control={form.control}
                   name='max_purchase_per_user'
