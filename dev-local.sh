@@ -16,6 +16,12 @@ FRONTEND_DIR="${ROOT_DIR}/web/default"
 LOG_DIR="${ROOT_DIR}/.dev-logs"
 mkdir -p "${LOG_DIR}"
 
+if [ -f "${ROOT_DIR}/.env" ]; then
+  set -a
+  . "${ROOT_DIR}/.env"
+  set +a
+fi
+
 BACKEND_PORT="${PORT:-3000}"
 FRONTEND_PORT="${FRONTEND_PORT:-3001}"
 
