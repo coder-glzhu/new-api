@@ -181,6 +181,22 @@ func SetApiRouter(router *gin.Engine) {
 			subscriptionAdminRoute.DELETE("/user_subscriptions/:id", controller.AdminDeleteUserSubscription)
 		}
 
+		// Lucky Bag
+		luckyBagRoute := apiRouter.Group("/lucky-bag")
+		luckyBagRoute.Use(middleware.UserAuth())
+		{
+			luckyBagRoute.GET("/status", controller.LuckyBagStatus)
+			luckyBagRoute.POST("/enter", controller.EnterLuckyBag)
+			luckyBagRoute.GET("/history", controller.LuckyBagHistory)
+		}
+		luckyBagAdminRoute := apiRouter.Group("/admin/lucky-bag")
+		luckyBagAdminRoute.Use(middleware.AdminAuth())
+		{
+			luckyBagAdminRoute.GET("", controller.AdminGetLuckyBagConfig)
+			luckyBagAdminRoute.PUT("", controller.AdminUpdateLuckyBagConfig)
+			luckyBagAdminRoute.POST("/draw", controller.AdminDrawLuckyBag)
+		}
+
 		// Subscription payment callbacks (no auth)
 		apiRouter.POST("/subscription/epay/notify", controller.SubscriptionEpayNotify)
 		apiRouter.GET("/subscription/epay/notify", controller.SubscriptionEpayNotify)
