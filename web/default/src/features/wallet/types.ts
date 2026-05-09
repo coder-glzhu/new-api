@@ -132,6 +132,14 @@ export interface TopupInfo {
   enable_hupijiao_topup?: boolean
   /** Minimum topup amount for Hupijiao routed Alipay */
   hupijiao_min_topup?: number
+  /** 满足虎皮椒最低实付人民币时，允许的最小充值数量（与 amount 同口径） */
+  hupijiao_min_recharge_amount?: number
+  /** Hupijiao-only price factor (RMB pay / display unit) */
+  hupijiao_price?: number
+  /** Preset top-up amounts for Hupijiao Alipay */
+  hupijiao_amount_options?: number[]
+  /** Per-tier discount map for Hupijiao */
+  hupijiao_discount?: Record<number, number>
   /** Available Creem products */
   creem_products?: CreemProduct[]
   /** Whether Waffo topup is enabled */

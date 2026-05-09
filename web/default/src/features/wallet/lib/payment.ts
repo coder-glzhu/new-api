@@ -143,11 +143,16 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
     const alipayMethod = topupInfo.pay_methods?.find(
       (method) => method.type === PAYMENT_TYPES.ALIPAY
     )
-    return (
-      alipayMethod?.min_topup ||
-      topupInfo.hupijiao_min_topup ||
-      DEFAULT_MIN_TOPUP
-    )
+    // min_topup / hupijiao_min_recharge_amount 为「充值数量」下限；hupijiao_min_topup 为最低实付人民币，勿混用
+    const fromMethod = alipayMethod?.min_topup
+    if (typeof fromMethod === 'number' && fromMethod > 0) {
+      return fromMethod
+    }
+    const fromApi = topupInfo.hupijiao_min_recharge_amount
+    if (typeof fromApi === 'number' && fromApi > 0) {
+      return fromApi
+    }
+    return DEFAULT_MIN_TOPUP
   }
 
   return DEFAULT_MIN_TOPUP
@@ -177,4 +182,41 @@ export function mergePresetAmounts(
     value: amount,
     discount: discounts[amount] || 1.0,
   }))
+}
+
+/**
+ * Preset buttons for the active top-up route: Hupijiao Alipay uses dedicated
+ * presets when configured; otherwise same rules as the global list.
+ */
+export function getPresetAmountsForTopupRoute(
+  topupInfo: TopupInfo | null,
+  paymentType: string,
+  globalPresets: PresetAmount[],
+  hupijiaoPresets: PresetAmount[]
+): PresetAmount[] {
+  if (shouldRouteAlipayThroughHupijiao(topupInfo, paymentType)) {
+    if (hupijiaoPresets.length > 0) {
+      return hupijiaoPresets
+    }
+    const min = getMinTopupAmount(topupInfo)
+    return generatePresetAmounts(min)
+  }
+  if (globalPresets.length > 0) {
+    return globalPresets
+  }
+  const min = getMinTopupAmount(topupInfo)
+  return generatePresetAmounts(min)
+}
+
+/** Price multiplier shown in preset / estimate UI for the selected route. */
+export function effectiveTopupPriceRatio(
+  topupInfo: TopupInfo | null,
+  paymentType: string,
+  globalRatio: number
+): number {
+  if (shouldRouteAlipayThroughHupijiao(topupInfo, paymentType)) {
+    const r = topupInfo?.hupijiao_price
+    return typeof r === 'number' && Number.isFinite(r) && r > 0 ? r : 0
+  }
+  return globalRatio
 }

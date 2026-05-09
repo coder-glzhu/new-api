@@ -103,25 +103,6 @@ const paymentSchema = z.object({
       })
     }
   }),
-  HupijiaoEnabled: z.boolean(),
-  HupijiaoAppId: z.string(),
-  HupijiaoAppSecret: z.string(),
-  HupijiaoApiUrl: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }, 'Provide a valid URL starting with http:// or https://'),
-  HupijiaoNotifyUrl: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }, 'Provide a valid URL starting with http:// or https://'),
-  HupijiaoReturnUrl: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }, 'Provide a valid URL starting with http:// or https://'),
-  HupijiaoMinTopUp: z.coerce.number().min(0),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
@@ -416,87 +397,6 @@ export function PaymentSettingsSection({
     }
   }
 
-  const saveHupijiaoSettings = async () => {
-    const values = form.getValues()
-    const sanitized = {
-      HupijiaoEnabled: values.HupijiaoEnabled as boolean,
-      HupijiaoAppId: values.HupijiaoAppId.trim(),
-      HupijiaoAppSecret: values.HupijiaoAppSecret.trim(),
-      HupijiaoApiUrl:
-        removeTrailingSlash(values.HupijiaoApiUrl) ||
-        'https://api.xunhupay.com/payment/do.html',
-      HupijiaoNotifyUrl: removeTrailingSlash(values.HupijiaoNotifyUrl),
-      HupijiaoReturnUrl: removeTrailingSlash(values.HupijiaoReturnUrl),
-      HupijiaoMinTopUp: values.HupijiaoMinTopUp as number,
-    }
-
-    const initial = {
-      HupijiaoEnabled: initialRef.current.HupijiaoEnabled,
-      HupijiaoAppId: initialRef.current.HupijiaoAppId.trim(),
-      HupijiaoAppSecret: initialRef.current.HupijiaoAppSecret.trim(),
-      HupijiaoApiUrl: removeTrailingSlash(initialRef.current.HupijiaoApiUrl),
-      HupijiaoNotifyUrl: removeTrailingSlash(
-        initialRef.current.HupijiaoNotifyUrl
-      ),
-      HupijiaoReturnUrl: removeTrailingSlash(
-        initialRef.current.HupijiaoReturnUrl
-      ),
-      HupijiaoMinTopUp: initialRef.current.HupijiaoMinTopUp,
-    }
-
-    const updates: Array<{ key: string; value: string | number | boolean }> = []
-
-    if (sanitized.HupijiaoEnabled !== initial.HupijiaoEnabled) {
-      updates.push({
-        key: 'HupijiaoEnabled',
-        value: sanitized.HupijiaoEnabled,
-      })
-    }
-
-    if (sanitized.HupijiaoAppId !== initial.HupijiaoAppId) {
-      updates.push({ key: 'HupijiaoAppId', value: sanitized.HupijiaoAppId })
-    }
-
-    if (
-      sanitized.HupijiaoAppSecret &&
-      sanitized.HupijiaoAppSecret !== initial.HupijiaoAppSecret
-    ) {
-      updates.push({
-        key: 'HupijiaoAppSecret',
-        value: sanitized.HupijiaoAppSecret,
-      })
-    }
-
-    if (sanitized.HupijiaoApiUrl !== initial.HupijiaoApiUrl) {
-      updates.push({ key: 'HupijiaoApiUrl', value: sanitized.HupijiaoApiUrl })
-    }
-
-    if (sanitized.HupijiaoNotifyUrl !== initial.HupijiaoNotifyUrl) {
-      updates.push({
-        key: 'HupijiaoNotifyUrl',
-        value: sanitized.HupijiaoNotifyUrl,
-      })
-    }
-
-    if (sanitized.HupijiaoReturnUrl !== initial.HupijiaoReturnUrl) {
-      updates.push({
-        key: 'HupijiaoReturnUrl',
-        value: sanitized.HupijiaoReturnUrl,
-      })
-    }
-
-    if (sanitized.HupijiaoMinTopUp !== initial.HupijiaoMinTopUp) {
-      updates.push({
-        key: 'HupijiaoMinTopUp',
-        value: sanitized.HupijiaoMinTopUp,
-      })
-    }
-
-    for (const update of updates) {
-      await updateOption.mutateAsync(update)
-    }
-  }
-
   const onSubmit = async (values: PaymentFormValues) => {
     const sanitized = {
       PayAddress: removeTrailingSlash(values.PayAddress),
@@ -514,15 +414,6 @@ export function PaymentSettingsSection({
       StripeUnitPrice: values.StripeUnitPrice,
       StripeMinTopUp: values.StripeMinTopUp,
       StripePromotionCodesEnabled: values.StripePromotionCodesEnabled,
-      HupijiaoEnabled: values.HupijiaoEnabled,
-      HupijiaoAppId: values.HupijiaoAppId.trim(),
-      HupijiaoAppSecret: values.HupijiaoAppSecret.trim(),
-      HupijiaoApiUrl:
-        removeTrailingSlash(values.HupijiaoApiUrl) ||
-        'https://api.xunhupay.com/payment/do.html',
-      HupijiaoNotifyUrl: removeTrailingSlash(values.HupijiaoNotifyUrl),
-      HupijiaoReturnUrl: removeTrailingSlash(values.HupijiaoReturnUrl),
-      HupijiaoMinTopUp: values.HupijiaoMinTopUp,
     }
 
     const initial = {
@@ -544,17 +435,6 @@ export function PaymentSettingsSection({
       StripeMinTopUp: initialRef.current.StripeMinTopUp,
       StripePromotionCodesEnabled:
         initialRef.current.StripePromotionCodesEnabled,
-      HupijiaoEnabled: initialRef.current.HupijiaoEnabled,
-      HupijiaoAppId: initialRef.current.HupijiaoAppId.trim(),
-      HupijiaoAppSecret: initialRef.current.HupijiaoAppSecret.trim(),
-      HupijiaoApiUrl: removeTrailingSlash(initialRef.current.HupijiaoApiUrl),
-      HupijiaoNotifyUrl: removeTrailingSlash(
-        initialRef.current.HupijiaoNotifyUrl
-      ),
-      HupijiaoReturnUrl: removeTrailingSlash(
-        initialRef.current.HupijiaoReturnUrl
-      ),
-      HupijiaoMinTopUp: initialRef.current.HupijiaoMinTopUp,
     }
 
     const updates: Array<{ key: string; value: string | number | boolean }> = []
@@ -649,52 +529,6 @@ export function PaymentSettingsSection({
       updates.push({
         key: 'StripePromotionCodesEnabled',
         value: sanitized.StripePromotionCodesEnabled,
-      })
-    }
-
-    if (sanitized.HupijiaoEnabled !== initial.HupijiaoEnabled) {
-      updates.push({
-        key: 'HupijiaoEnabled',
-        value: sanitized.HupijiaoEnabled,
-      })
-    }
-
-    if (sanitized.HupijiaoAppId !== initial.HupijiaoAppId) {
-      updates.push({ key: 'HupijiaoAppId', value: sanitized.HupijiaoAppId })
-    }
-
-    if (
-      sanitized.HupijiaoAppSecret &&
-      sanitized.HupijiaoAppSecret !== initial.HupijiaoAppSecret
-    ) {
-      updates.push({
-        key: 'HupijiaoAppSecret',
-        value: sanitized.HupijiaoAppSecret,
-      })
-    }
-
-    if (sanitized.HupijiaoApiUrl !== initial.HupijiaoApiUrl) {
-      updates.push({ key: 'HupijiaoApiUrl', value: sanitized.HupijiaoApiUrl })
-    }
-
-    if (sanitized.HupijiaoNotifyUrl !== initial.HupijiaoNotifyUrl) {
-      updates.push({
-        key: 'HupijiaoNotifyUrl',
-        value: sanitized.HupijiaoNotifyUrl,
-      })
-    }
-
-    if (sanitized.HupijiaoReturnUrl !== initial.HupijiaoReturnUrl) {
-      updates.push({
-        key: 'HupijiaoReturnUrl',
-        value: sanitized.HupijiaoReturnUrl,
-      })
-    }
-
-    if (sanitized.HupijiaoMinTopUp !== initial.HupijiaoMinTopUp) {
-      updates.push({
-        key: 'HupijiaoMinTopUp',
-        value: sanitized.HupijiaoMinTopUp,
       })
     }
 
@@ -1072,207 +906,6 @@ export function PaymentSettingsSection({
               {updateOption.isPending
                 ? t('Saving...')
                 : t('Save Epay settings')}
-            </Button>
-          </div>
-
-          <Separator />
-
-          <div className='space-y-4'>
-            <div>
-              <h3 className='text-lg font-medium'>{t('Hupijiao Gateway')}</h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Configuration for Alipay payments through Hupijiao')}
-              </p>
-            </div>
-
-            <div className='rounded-md bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100'>
-              <p className='mb-2 font-medium'>{t('Webhook Configuration:')}</p>
-              <ul className='list-inside list-disc space-y-1'>
-                <li>
-                  {t('Webhook URL:')}{' '}
-                  <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
-                    {'<ServerAddress>/api/hupijiao/webhook'}
-                  </code>
-                </li>
-                <li>
-                  {t(
-                    'Leave callback URLs blank to let the backend use the server address when supported.'
-                  )}
-                </li>
-              </ul>
-            </div>
-
-            <FormField
-              control={form.control}
-              name='HupijiaoEnabled'
-              render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                  <div className='space-y-0.5'>
-                    <FormLabel className='text-base'>
-                      {t('Enable Hupijiao')}
-                    </FormLabel>
-                    <FormDescription>
-                      {t('Enable Alipay checkout for wallet and subscriptions')}
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <div className='grid gap-6 md:grid-cols-3'>
-              <FormField
-                control={form.control}
-                name='HupijiaoAppId'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Hupijiao APPID')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        autoComplete='off'
-                        {...field}
-                        onChange={(event) => field.onChange(event.target.value)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('Merchant APPID from Hupijiao dashboard')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='HupijiaoAppSecret'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Hupijiao Secret')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type='password'
-                        placeholder={t('Enter new key to update')}
-                        autoComplete='new-password'
-                        {...field}
-                        onChange={(event) => field.onChange(event.target.value)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('Leave blank unless rotating the secret')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='HupijiaoMinTopUp'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Minimum top-up (CNY)')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type='number'
-                        min={0}
-                        step='1'
-                        value={(field.value ?? 0) as number}
-                        onChange={(event) =>
-                          field.onChange(event.target.valueAsNumber)
-                        }
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('Minimum actual payment amount in CNY')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name='HupijiaoApiUrl'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Hupijiao API endpoint')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder='https://api.xunhupay.com/payment/do.html'
-                      {...field}
-                      onChange={(event) => field.onChange(event.target.value)}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('Payment creation endpoint from Hupijiao')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className='grid gap-6 md:grid-cols-2'>
-              <FormField
-                control={form.control}
-                name='HupijiaoNotifyUrl'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Notify URL')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder='https://yourdomain.com/api/hupijiao/webhook'
-                        {...field}
-                        onChange={(event) => field.onChange(event.target.value)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('Leave blank to use the default webhook URL')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='HupijiaoReturnUrl'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Return URL')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder='https://yourdomain.com/wallet'
-                        {...field}
-                        onChange={(event) => field.onChange(event.target.value)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('Where users return after payment')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <Button
-              type='button'
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                saveHupijiaoSettings()
-              }}
-              disabled={updateOption.isPending}
-            >
-              {updateOption.isPending
-                ? t('Saving...')
-                : t('Save Hupijiao settings')}
             </Button>
           </div>
 

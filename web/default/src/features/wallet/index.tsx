@@ -40,6 +40,9 @@ import {
   isHupijiaoPayment,
   isWaffoPancakePayment,
   shouldRouteAlipayThroughHupijiao,
+  mergePresetAmounts,
+  getPresetAmountsForTopupRoute,
+  effectiveTopupPriceRatio,
 } from './lib'
 import type {
   UserWalletData,
@@ -84,6 +87,42 @@ export function Wallet(props: WalletProps) {
       ? 1
       : currency?.usdExchangeRate || 1
   }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
+
+  const displayPaymentType = useMemo(
+    () => selectedPaymentMethod?.type ?? getDefaultPaymentType(topupInfo),
+    [selectedPaymentMethod?.type, topupInfo]
+  )
+
+  const hupijiaoPresetAmounts = useMemo(() => {
+    if (!topupInfo?.hupijiao_amount_options?.length) {
+      return []
+    }
+    return mergePresetAmounts(
+      topupInfo.hupijiao_amount_options,
+      topupInfo.hupijiao_discount || {}
+    )
+  }, [topupInfo])
+
+  const effectivePresetAmounts = useMemo(
+    () =>
+      getPresetAmountsForTopupRoute(
+        topupInfo,
+        displayPaymentType,
+        presetAmounts,
+        hupijiaoPresetAmounts
+      ),
+    [topupInfo, displayPaymentType, presetAmounts, hupijiaoPresetAmounts]
+  )
+
+  const presetPricingRatio = useMemo(
+    () =>
+      effectiveTopupPriceRatio(
+        topupInfo,
+        displayPaymentType,
+        (status?.price as number) || 1
+      ),
+    [topupInfo, displayPaymentType, status?.price]
+  )
 
   const {
     amount: paymentAmount,
@@ -332,8 +371,13 @@ export function Wallet(props: WalletProps) {
   }
 
   const getDiscountRate = useCallback(() => {
-    return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
-  }, [topupInfo, topupAmount])
+    const type =
+      selectedPaymentMethod?.type ?? getDefaultPaymentType(topupInfo)
+    const map = shouldRouteAlipayThroughHupijiao(topupInfo, type)
+      ? topupInfo?.hupijiao_discount
+      : topupInfo?.discount
+    return map?.[topupAmount] || DEFAULT_DISCOUNT_RATE
+  }, [topupInfo, topupAmount, selectedPaymentMethod?.type])
 
   const handleSubscriptionAvailabilityChange = useCallback(
     (available: boolean) => {
@@ -410,7 +454,7 @@ export function Wallet(props: WalletProps) {
                 <div id='wallet-add-funds' className='scroll-mt-4'>
                   <RechargeFormCard
                     topupInfo={topupInfo}
-                    presetAmounts={presetAmounts}
+                    presetAmounts={effectivePresetAmounts}
                     selectedPreset={selectedPreset}
                     onSelectPreset={handleSelectPreset}
                     topupAmount={topupAmount}
@@ -420,8 +464,15 @@ export function Wallet(props: WalletProps) {
                     onPaymentMethodSelect={handlePaymentMethodSelect}
                     paymentLoading={paymentLoading}
                     loading={topupLoading}
-                    priceRatio={(status?.price as number) || 1}
-                    usdExchangeRate={effectiveUsdExchangeRate}
+                    priceRatio={presetPricingRatio}
+                    usdExchangeRate={
+                      shouldRouteAlipayThroughHupijiao(
+                        topupInfo,
+                        displayPaymentType
+                      )
+                        ? 1
+                        : effectiveUsdExchangeRate
+                    }
                     onOpenBilling={() => setBillingDialogOpen(true)}
                     creemProducts={topupInfo?.creem_products}
                     enableCreemTopup={topupInfo?.enable_creem_topup}
@@ -433,6 +484,10 @@ export function Wallet(props: WalletProps) {
                     enableWaffoPancakeTopup={
                       topupInfo?.enable_waffo_pancake_topup
                     }
+                    alipayHupijiaoUsdQuotaCopy={shouldRouteAlipayThroughHupijiao(
+                      topupInfo,
+                      displayPaymentType
+                    )}
                   />
                 </div>
               </TabsContent>

@@ -67,7 +67,6 @@ function SortableSubscriptionItem({
   totalAmount,
   usedAmount,
   remainAmount,
-  isDragging,
   t,
 }: {
   record: UserSubscriptionRecord
@@ -79,7 +78,6 @@ function SortableSubscriptionItem({
   totalAmount: number
   usedAmount: number
   remainAmount: number
-  isDragging: boolean
   t: (key: string, opts?: Record<string, unknown>) => string
 }) {
   const subscription = record.subscription
@@ -209,7 +207,6 @@ export function MySubscriptionsCard({ onAvailabilityChange }: MySubscriptionsCar
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingPref, setSavingPref] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
 
   // Track whether the order was actually changed to avoid unnecessary API calls
   const initialOrderRef = useRef<number[]>([])
@@ -285,7 +282,6 @@ export function MySubscriptionsCard({ onAvailabilityChange }: MySubscriptionsCar
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
-    setIsDragging(false)
     const { active, over } = event
     if (!over || active.id === over.id) return
 
@@ -451,14 +447,14 @@ export function MySubscriptionsCard({ onAvailabilityChange }: MySubscriptionsCar
               disabled={savingPref}
               onClick={() => handleBillingPrefChange(opt.value)}
               className={cn(
-                'rounded-lg border px-3 py-2 text-left text-xs transition-colors',
+                'hover:border-foreground rounded-lg border px-3 py-2 text-left text-xs transition-colors disabled:pointer-events-none disabled:opacity-50',
                 billingPref === opt.value
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/60 border-transparent'
+                  ? 'border-foreground bg-foreground/5 text-foreground'
+                  : 'border-muted bg-muted/30 text-muted-foreground hover:bg-muted/60'
               )}
             >
               <span className='block font-medium'>{t(opt.labelKey)}</span>
-              <span className={cn('block mt-0.5', billingPref === opt.value ? 'text-primary-foreground/70' : 'text-muted-foreground/70')}>
+              <span className='text-muted-foreground/70 mt-0.5 block'>
                 {t(opt.descKey)}
               </span>
             </button>
@@ -474,9 +470,7 @@ export function MySubscriptionsCard({ onAvailabilityChange }: MySubscriptionsCar
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
-              onDragStart={() => setIsDragging(true)}
               onDragEnd={handleDragEnd}
-              onDragCancel={() => setIsDragging(false)}
             >
               <SortableContext
                 items={activeOrder}
@@ -505,7 +499,6 @@ export function MySubscriptionsCard({ onAvailabilityChange }: MySubscriptionsCar
                         totalAmount={totalAmount}
                         usedAmount={usedAmount}
                         remainAmount={remainAmount}
-                        isDragging={isDragging}
                         t={t}
                       />
                     )
@@ -542,7 +535,6 @@ export function MySubscriptionsCard({ onAvailabilityChange }: MySubscriptionsCar
                 totalAmount={totalAmount}
                 usedAmount={usedAmount}
                 remainAmount={remainAmount}
-                isDragging={false}
                 t={t}
               />
             )

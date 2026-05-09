@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -20,11 +21,12 @@ import (
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
-// HupijiaoPayRequest 虎皮椒支付请求
+// HupijiaoPayRequest 虎皮椒支付请求；amount 为购买的美元额度（可两位小数），与 TopUp.Amount（美元分）一致。
 type HupijiaoPayRequest struct {
-	Amount float64 `json:"amount" binding:"required,min=0.01"`
+	Amount *float64 `json:"amount"`
 }
 
 // HupijiaoPayResponse 虎皮椒支付响应
@@ -84,9 +86,44 @@ func generateHupijiaoSignature(params map[string]string, appSecret string) strin
 	return common.Md5([]byte(stringSignTemp))
 }
 
+// hupijiaoMinQuotaHintMsg 按最低人民币 ÷ 价格系数算出单笔最少要买多少美元额度（与 topup/info 一致）。
+func hupijiaoMinQuotaHintMsg() string {
+	if setting.HupijiaoPrice <= 0 {
+		return "请先配置虎皮椒价格系数"
+	}
+	minUsd := formatHupijiaoMinQuotaFromCents(computeMinHupijiaoRechargeAmount())
+	return fmt.Sprintf("购买额度至少 %s 美元", minUsd)
+}
+
+// bindHupijiaoTopupQuotaCents 解析 JSON 中的美元额度，返回美分；msg 非空时表示应返回给前端的友好中文错误。
+func bindHupijiaoTopupQuotaCents(c *gin.Context) (usdCents int64, msg string) {
+	var req HupijiaoPayRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		return 0, "请求格式有误，例如：{\"amount\":50}"
+	}
+	if req.Amount == nil {
+		return 0, hupijiaoMinQuotaHintMsg()
+	}
+	a := *req.Amount
+	if math.IsNaN(a) || math.IsInf(a, 0) {
+		return 0, hupijiaoMinQuotaHintMsg()
+	}
+	if a < 0 {
+		return 0, "额度不能为负数"
+	}
+	if a < 0.01 {
+		return 0, hupijiaoMinQuotaHintMsg()
+	}
+	cents := int64(math.Round(a * 100))
+	if cents < 1 {
+		return 0, hupijiaoMinQuotaHintMsg()
+	}
+	return cents, ""
+}
+
 // RequestHupijiaoPay 创建虎皮椒支付订单
 func RequestHupijiaoPay(c *gin.Context) {
-	if !setting.HupijiaoEnabled {
+	if !isHupijiaoTopUpEnabled() {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": "虎皮椒支付未启用",
@@ -94,11 +131,11 @@ func RequestHupijiaoPay(c *gin.Context) {
 		return
 	}
 
-	var req HupijiaoPayRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	usdCents, badMsg := bindHupijiaoTopupQuotaCents(c)
+	if badMsg != "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": "参数错误: " + err.Error(),
+			"message": badMsg,
 		})
 		return
 	}
@@ -106,22 +143,26 @@ func RequestHupijiaoPay(c *gin.Context) {
 	// 获取用户信息
 	userId := c.GetInt("id")
 	username := c.GetString("username")
-	userGroup := c.GetString("group")
 
-	// 前端传的amount是用户想充值的美元数
-	amount := int64(req.Amount)
-
-	// 后端重新计算实际应支付金额（防止前端篡改）
-	payMoney := getPayMoney(amount, userGroup)
-
-	// 验证最低充值金额（以实际支付金额为准）
-	if payMoney < float64(setting.HupijiaoMinTopUp) {
+	if setting.HupijiaoPrice <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": fmt.Sprintf("实付金额 %.2f 元低于最低充值金额 %d 元，请增加充值数量后重试", payMoney, setting.HupijiaoMinTopUp),
+			"message": "未配置虎皮椒价格系数（HupijiaoPrice），请在系统设置中填写大于 0 的值",
 		})
 		return
 	}
+
+	// 最低额用未 Round 的精确实付比较，避免 49.98×0.2=9.996 被显示成 10.00 却算作满足最低 10 元
+	payYuanRaw := hupijiaoPayYuanRawDecimal(usdCents)
+	dMinTop := decimal.NewFromInt(int64(setting.HupijiaoMinTopUp))
+	if payYuanRaw.Cmp(dMinTop) < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": hupijiaoMinQuotaHintMsg(),
+		})
+		return
+	}
+	payMoney := payYuanRaw.Round(2).InexactFloat64()
 
 	// 生成唯一订单号
 	tradeNo := fmt.Sprintf("HUPI%d%d", userId, time.Now().UnixNano()/1e6)
@@ -129,7 +170,7 @@ func RequestHupijiaoPay(c *gin.Context) {
 	// 创建待支付订单
 	topUp := &model.TopUp{
 		UserId:          userId,
-		Amount:          amount,
+		Amount:          usdCents,
 		Money:           payMoney,
 		TradeNo:         tradeNo,
 		PaymentMethod:   model.PaymentMethodAlipay,
@@ -383,26 +424,48 @@ func expireTopUpOrderIfTimedOut(topUp *model.TopUp) bool {
 
 // RequestHupijiaoAmount 获取虎皮椒支付金额（应用折扣）
 func RequestHupijiaoAmount(c *gin.Context) {
-	var req struct {
-		Amount int64 `json:"amount" binding:"required,min=1"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+	if !isHupijiaoTopUpEnabled() {
+		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
-			"message": err.Error(),
+			"message": "虎皮椒支付未启用",
 		})
 		return
 	}
 
-	userGroup := c.GetString("group")
-	payMoney := getPayMoney(req.Amount, userGroup)
+	usdCents, badMsg := bindHupijiaoTopupQuotaCents(c)
+	if badMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": badMsg,
+		})
+		return
+	}
+
+	if setting.HupijiaoPrice <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "未配置虎皮椒价格系数（HupijiaoPrice）",
+		})
+		return
+	}
+
+	payYuanRaw := hupijiaoPayYuanRawDecimal(usdCents)
+	dMinTop := decimal.NewFromInt(int64(setting.HupijiaoMinTopUp))
+	if payYuanRaw.Cmp(dMinTop) < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": hupijiaoMinQuotaHintMsg(),
+		})
+		return
+	}
+
+	payMoney := getHupijiaoPayMoneyUsdCents(usdCents)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
 			"amount": payMoney,
-			"money":  req.Amount,
+			"money":  float64(usdCents) / 100.0,
 		},
 	})
 }
@@ -783,6 +846,14 @@ func GetTopUpOrderStatus(c *gin.Context) {
 
 // RepayTopUpOrder 重新支付订单（创建新的支付链接）
 func RepayTopUpOrder(c *gin.Context) {
+	if !isHupijiaoTopUpEnabled() {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "虎皮椒支付未启用",
+		})
+		return
+	}
+
 	userId := c.GetInt("id")
 	username := c.GetString("username")
 	tradeNo := c.Param("trade_no")

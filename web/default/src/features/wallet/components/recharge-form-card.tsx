@@ -53,6 +53,8 @@ interface RechargeFormCardProps {
   waffoMinTopup?: number
   onWaffoMethodSelect?: (method: WaffoPayMethod, index: number) => void
   enableWaffoPancakeTopup?: boolean
+  /** 虎皮椒 + 额度按美元展示时：主金额带 $，应付行标明人民币 */
+  alipayHupijiaoUsdQuotaCopy?: boolean
 }
 
 export function RechargeFormCard({
@@ -78,6 +80,7 @@ export function RechargeFormCard({
   waffoMinTopup,
   onWaffoMethodSelect,
   enableWaffoPancakeTopup,
+  alipayHupijiaoUsdQuotaCopy = false,
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
@@ -120,9 +123,9 @@ export function RechargeFormCard({
         <div className='space-y-5'>
           <div className='space-y-2.5'>
             <Skeleton className='h-3 w-16' />
-            <div className='grid grid-cols-2 gap-2'>
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className='h-16 rounded-lg' />
+            <div className='grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6'>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className='h-[4.75rem] rounded-lg' />
               ))}
             </div>
           </div>
@@ -151,7 +154,7 @@ export function RechargeFormCard({
           <WalletCards className='text-muted-foreground size-4' />
         </div>
         <div className='min-w-0 flex-1'>
-          <h3 className='text-sm font-semibold'>{t('Add Funds')}</h3>
+          <h3 className='text-sm font-semibold'>{t('Purchase quota')}</h3>
           <p className='text-muted-foreground mt-0.5 text-xs'>
             {t('Choose an amount and payment method')}
           </p>
@@ -179,7 +182,7 @@ export function RechargeFormCard({
                   <Label className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
                     {t('Amount')}
                   </Label>
-                  <div className='grid grid-cols-2 gap-2'>
+                  <div className='grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6'>
                     {presetAmounts.map((preset, index) => {
                       const discount =
                         preset.discount ||
@@ -201,7 +204,7 @@ export function RechargeFormCard({
                           key={index}
                           variant='outline'
                           className={cn(
-                            'hover:border-foreground flex min-h-14 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal',
+                            'hover:border-foreground flex min-h-[4.75rem] flex-col items-start justify-center rounded-lg px-3 py-3.5 text-left whitespace-normal',
                             selectedPreset === preset.value
                               ? 'border-foreground bg-foreground/5'
                               : 'border-muted'
@@ -210,7 +213,9 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold'>
-                              {formatNumber(displayValue)}
+                              {alipayHupijiaoUsdQuotaCopy
+                                ? `$${formatNumber(displayValue)}`
+                                : formatNumber(displayValue)}
                             </div>
                             {hasDiscount && (
                               <div className='text-xs font-medium text-green-600'>
@@ -218,12 +223,12 @@ export function RechargeFormCard({
                               </div>
                             )}
                           </div>
-                          <div className='text-muted-foreground mt-1 w-full text-xs'>
-                            Pay {formatCurrency(actualPrice)}
+                          <div className='text-muted-foreground mt-1.5 w-full text-xs leading-snug'>
+                            {t('Pay:')} {formatCurrency(actualPrice)}
                             {hasDiscount && savedAmount > 0 && (
                               <span className='text-green-600'>
                                 {' '}
-                                · Save {formatCurrency(savedAmount)}
+                                · {t('Save')} {formatCurrency(savedAmount)}
                               </span>
                             )}
                           </div>

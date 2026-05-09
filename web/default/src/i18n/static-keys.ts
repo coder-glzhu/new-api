@@ -20,6 +20,7 @@ export const STATIC_I18N_KEYS = [
   'Request Limits',
   'Content',
   'Integrations',
+  'Add-on Features',
   'Models',
   'Maintenance',
 

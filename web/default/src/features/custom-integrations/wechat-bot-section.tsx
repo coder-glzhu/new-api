@@ -74,7 +74,7 @@ export function WechatBotSection({ defaultValues }: Props) {
     for (const key of changed) {
       await updateOption.mutateAsync({ key, value: values[key] })
     }
-    baselineRef.current = { ...values }
+    baselineRef.current = { ...baselineRef.current, ...values }
   }
 
   const handleTestSend = async () => {

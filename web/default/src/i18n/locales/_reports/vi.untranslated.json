@@ -4,6 +4,7 @@
   "Drag to set deduction order — top subscription is charged first": "Drag to set deduction order — top subscription is charged first",
   "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.",
   "Enter Lucky Bag Draw": "Enter the Draw",
+  "Come back tomorrow for the next round 🎁": "Come back tomorrow for the next round 🎁",
   "Up to 30 days = +30": "Up to 30 check-in days = +30 pt",
   "More check-in days = more weight (up to 30)": "More check-in days = more luck (up to 30)",
   "Winners receive a redemption code in the draw history": "Winners receive a redemption code visible in the draw history",
@@ -20,6 +21,7 @@
   "The message sent to groups 1 hour before each draw. Leave empty to use the built-in default.": "The message sent to groups 1 hour before each draw. Leave empty to use the built-in default.",
   "Failed to send test message": "Failed to send test message",
   "Enable Alipay checkout for wallet and subscriptions": "Enable Alipay checkout for wallet and subscriptions",
+  "APP ID, keys and callback URLs for the Hupijiao channel": "APP ID, keys and callback URLs for the Hupijiao channel",
   "Leave blank to use the default webhook URL": "Leave blank to use the default webhook URL",
   "Leave callback URLs blank to let the backend use the server address when supported.": "Leave callback URLs blank to let the backend use the server address when supported.",
   "Scan the QR code or open the payment link to complete payment": "Scan the QR code or open the payment link to complete payment",
@@ -27,5 +29,7 @@
   "Go to Wallet → Redemption Code, enter the code above to receive your credit": "Go to Wallet → Redemption Code, enter the code above to receive your credit",
   "Remember to enter earlier next time, good luck! 🤞": "Remember to enter earlier next time, good luck! 🤞",
   "Click a time to edit it. Changes take effect from the next minute.": "Click a time to edit it. Changes take effect from the next minute.",
-  "Please add at least one draw time": "Please add at least one draw time"
+  "Please add at least one draw time": "Please add at least one draw time",
+  "Winner receives a random amount within this range. Applies to newly created draw sessions.": "Winner receives a random amount within this range. Applies to newly created draw sessions.",
+  "Maximum prize must be greater than or equal to minimum": "Maximum prize must be greater than or equal to minimum"
 }

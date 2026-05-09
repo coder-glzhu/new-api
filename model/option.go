@@ -125,6 +125,9 @@ func InitOptionMap() {
 	common.OptionMap["HupijiaoNotifyUrl"] = setting.HupijiaoNotifyUrl
 	common.OptionMap["HupijiaoReturnUrl"] = setting.HupijiaoReturnUrl
 	common.OptionMap["HupijiaoMinTopUp"] = strconv.Itoa(setting.HupijiaoMinTopUp)
+	common.OptionMap["HupijiaoPrice"] = strconv.FormatFloat(setting.HupijiaoPrice, 'f', -1, 64)
+	common.OptionMap["HupijiaoAmountOptions"] = setting.HupijiaoAmountOptions
+	common.OptionMap["HupijiaoAmountDiscount"] = setting.HupijiaoAmountDiscount
 	common.OptionMap["TopupUpgradeGroup"] = setting.TopupUpgradeGroup
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
@@ -211,12 +214,16 @@ func InitOptionMap() {
 
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
+	loadedKeys := make(map[string]struct{}, len(options))
 	for _, option := range options {
+		loadedKeys[option.Key] = struct{}{}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
 	}
+	migrateHupijiaoPricingFromLegacyIfNeeded(loadedKeys)
+	migrateHupijiaoTopupAmountToUsdCentsIfNeeded(loadedKeys)
 }
 
 func SyncOptions(frequency int) {
@@ -478,6 +485,12 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.HupijiaoReturnUrl = value
 	case "HupijiaoMinTopUp":
 		setting.HupijiaoMinTopUp, _ = strconv.Atoi(value)
+	case "HupijiaoPrice":
+		setting.HupijiaoPrice, _ = strconv.ParseFloat(value, 64)
+	case "HupijiaoAmountOptions":
+		setting.HupijiaoAmountOptions = value
+	case "HupijiaoAmountDiscount":
+		setting.HupijiaoAmountDiscount = value
 	case "TopupUpgradeGroup":
 		setting.TopupUpgradeGroup = strings.TrimSpace(value)
 	case "TopupGroupRatio":

@@ -751,9 +751,10 @@ func RechargeByHupijiao(tradeNo string, amount float64) error {
 			return fmt.Errorf("支付金额异常: 应付%.2f元, 实际支付%.2f元", topUp.Money, amount)
 		}
 
-		dAmount := decimal.NewFromInt(topUp.Amount)
+		// topUp.Amount：虎皮椒配额订单为「美元分」（$1.00=100），与 controller 侧一致；站内配额 = (Amount/100)*QuotaPerUnit
+		dUsd := decimal.NewFromInt(topUp.Amount).Div(decimal.NewFromInt(100))
 		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		quotaToAdd = int(dUsd.Mul(dQuotaPerUnit).Round(0).IntPart())
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}

@@ -12,6 +12,18 @@ const defaultSettings: CustomIntegrationSettings = {
   WechatBotReminderContent: '',
   WechatBotResultContent: '',
   LuckyBagDrawHours: '9,12,17',
+  LuckyBagMinUsd: '1',
+  LuckyBagMaxUsd: '10',
+  HupijiaoPrice: 7.3,
+  HupijiaoAmountOptions: '[]',
+  HupijiaoAmountDiscount: '{}',
+  HupijiaoEnabled: false,
+  HupijiaoAppId: '',
+  HupijiaoAppSecret: '',
+  HupijiaoApiUrl: 'https://api.xunhupay.com/payment/do.html',
+  HupijiaoNotifyUrl: '',
+  HupijiaoReturnUrl: '',
+  HupijiaoMinTopUp: 1,
 }
 
 export function CustomIntegrationsSettings() {

@@ -2,9 +2,11 @@ package controller
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,8 +25,23 @@ import (
 )
 
 func GetTopUpInfo(c *gin.Context) {
-	// 获取支付方式
-	payMethods := operation_setting.PayMethods
+	// 克隆支付方式，避免修改全局 PayMethods；虎皮椒会调整支付宝 min_topup（数量为充值档位，非人民币）。
+	payMethods := clonePayMethodsForTopup(operation_setting.PayMethods)
+
+	enableHupijiao := isHupijiaoTopUpEnabled()
+	var minHupijiaoRechargeQty int64
+	if enableHupijiao {
+		minHupijiaoRechargeQty = computeMinHupijiaoRechargeAmount()
+		minHupStr := formatHupijiaoMinQuotaFromCents(minHupijiaoRechargeQty)
+		for i := range payMethods {
+			if payMethods[i]["type"] == model.PaymentMethodAlipay {
+				existing, err := parseHupijiaoQuotaToUsdCents(payMethods[i]["min_topup"])
+				if err != nil || existing < minHupijiaoRechargeQty {
+					payMethods[i]["min_topup"] = minHupStr
+				}
+			}
+		}
+	}
 
 	// 如果启用了 Stripe 支付，添加到支付方法列表
 	if isStripeTopUpEnabled() {
@@ -90,7 +107,6 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
-	enableHupijiao := isHupijiaoTopUpEnabled()
 	if enableHupijiao {
 		hasAlipay := false
 		for _, method := range payMethods {
@@ -104,7 +120,7 @@ func GetTopUpInfo(c *gin.Context) {
 				"name":      "支付宝",
 				"type":      model.PaymentMethodAlipay,
 				"color":     "rgba(var(--semi-cyan-5), 1)",
-				"min_topup": strconv.Itoa(setting.HupijiaoMinTopUp),
+				"min_topup": formatHupijiaoMinQuotaFromCents(minHupijiaoRechargeQty),
 			})
 		}
 	}
@@ -122,16 +138,20 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"creem_products":          setting.CreemProducts,
-		"pay_methods":             payMethods,
-		"min_topup":               operation_setting.MinTopUp,
-		"stripe_min_topup":        setting.StripeMinTopUp,
-		"waffo_min_topup":         setting.WaffoMinTopUp,
-		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
-		"hupijiao_min_topup":      setting.HupijiaoMinTopUp,
-		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
-		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
-		"topup_link":              common.TopUpLink,
+		"creem_products":               setting.CreemProducts,
+		"pay_methods":                  payMethods,
+		"min_topup":                    operation_setting.MinTopUp,
+		"stripe_min_topup":             setting.StripeMinTopUp,
+		"waffo_min_topup":              setting.WaffoMinTopUp,
+		"waffo_pancake_min_topup":      setting.WaffoPancakeMinTopUp,
+		"hupijiao_min_topup":           setting.HupijiaoMinTopUp,
+		"hupijiao_min_recharge_amount": hupijiaoMinQuotaFloatFromCents(minHupijiaoRechargeQty),
+		"hupijiao_price":               setting.HupijiaoPrice,
+		"hupijiao_amount_options":      setting.GetHupijiaoPaymentAmountOptions(),
+		"hupijiao_discount":            setting.GetHupijiaoPaymentDiscount(),
+		"amount_options":               operation_setting.GetPaymentSetting().AmountOptions,
+		"discount":                     operation_setting.GetPaymentSetting().AmountDiscount,
+		"topup_link":                   common.TopUpLink,
 	}
 	common.ApiSuccess(c, data)
 }
@@ -187,6 +207,100 @@ func getPayMoney(amount int64, group string) float64 {
 	payMoney := dAmount.Mul(dPrice).Mul(dTopupGroupRatio).Mul(dDiscount)
 
 	return payMoney.InexactFloat64()
+}
+
+// hupijiaoPayYuanRawDecimal 虎皮椒实付人民币（元），未 Round 到分。实付 = 美元额度 × HupijiaoPrice × 档位折扣；不参与通用「分组充值倍率」。
+// TopUp.Money、支付宝 total_fee 仍用 Round(2)。
+func hupijiaoPayYuanRawDecimal(usdCents int64) decimal.Decimal {
+	if usdCents < 1 {
+		return decimal.Zero
+	}
+	dUsd := decimal.NewFromInt(usdCents).Div(decimal.NewFromInt(100))
+	dPrice := decimal.NewFromFloat(setting.HupijiaoPrice)
+
+	discount := 1.0
+	if usdCents%100 == 0 {
+		if ds, ok := setting.GetHupijiaoPaymentDiscount()[int(usdCents/100)]; ok {
+			if ds > 0 {
+				discount = ds
+			}
+		}
+	}
+	dDiscount := decimal.NewFromFloat(discount)
+
+	return dUsd.Mul(dPrice).Mul(dDiscount)
+}
+
+// getHupijiaoPayMoneyUsdCents 虎皮椒实付人民币，与支付渠道一致保留两位小数。
+func getHupijiaoPayMoneyUsdCents(usdCents int64) float64 {
+	return hupijiaoPayYuanRawDecimal(usdCents).Round(2).InexactFloat64()
+}
+
+// computeMinHupijiaoRechargeAmount 最低美元额度（美分）= ceil(最低人民币 / HupijiaoPrice × 100)，与档位折扣、分组倍率无关。
+func computeMinHupijiaoRechargeAmount() int64 {
+	if setting.HupijiaoPrice <= 0 {
+		return 100
+	}
+	if setting.HupijiaoMinTopUp <= 0 {
+		return 100
+	}
+	dMin := decimal.NewFromInt(int64(setting.HupijiaoMinTopUp))
+	dPrice := decimal.NewFromFloat(setting.HupijiaoPrice)
+	if dPrice.Sign() <= 0 {
+		return 100
+	}
+	cents := dMin.Div(dPrice).Mul(decimal.NewFromInt(100)).Ceil().IntPart()
+	if cents < 1 {
+		return 1
+	}
+	return cents
+}
+
+func hupijiaoMinQuotaFloatFromCents(cents int64) float64 {
+	return float64(cents) / 100.0
+}
+
+// formatHupijiaoMinQuotaFromCents 用于 pay_methods.min_topup 展示（美元额度，可含小数）。
+func formatHupijiaoMinQuotaFromCents(cents int64) string {
+	f := hupijiaoMinQuotaFloatFromCents(cents)
+	s := strconv.FormatFloat(f, 'f', 2, 64)
+	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	if s == "" {
+		return "0"
+	}
+	return s
+}
+
+func parseHupijiaoQuotaToUsdCents(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, strconv.ErrSyntax
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	if f < 0 {
+		return 0, strconv.ErrSyntax
+	}
+	return int64(math.Round(f * 100)), nil
+}
+
+func clonePayMethodsForTopup(src []map[string]string) []map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]map[string]string, len(src))
+	for i, m := range src {
+		if m == nil {
+			continue
+		}
+		out[i] = make(map[string]string, len(m))
+		for k, v := range m {
+			out[i][k] = v
+		}
+	}
+	return out
 }
 
 func getMinTopup() int64 {

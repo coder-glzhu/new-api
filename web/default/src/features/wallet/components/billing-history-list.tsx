@@ -272,7 +272,9 @@ export function BillingHistoryList({
           </div>
           <Select
             value={pageSize.toString()}
-            onValueChange={(value) => handlePageSizeChange(parseInt(value))}
+            onValueChange={(value) => {
+              if (value) handlePageSizeChange(parseInt(value, 10))
+            }}
           >
             <SelectTrigger className='w-32'>
               <SelectValue />

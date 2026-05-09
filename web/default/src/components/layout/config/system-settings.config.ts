@@ -3,12 +3,13 @@ import {
   Box,
   CreditCard,
   Layout,
-  Link,
+  Puzzle,
   Settings,
   Shield,
   ShieldAlert,
   Wrench,
 } from 'lucide-react'
+import { getCustomIntegrationsSectionNavItems } from '@/features/custom-integrations/section-registry.tsx'
 import { getAuthSectionNavItems } from '@/features/system-settings/auth/section-registry.tsx'
 import { getBillingSectionNavItems } from '@/features/system-settings/billing/section-registry.tsx'
 import { getContentSectionNavItems } from '@/features/system-settings/content/section-registry.tsx'
@@ -16,7 +17,6 @@ import { getModelsSectionNavItems } from '@/features/system-settings/models/sect
 import { getOperationsSectionNavItems } from '@/features/system-settings/operations/section-registry.tsx'
 import { getSecuritySectionNavItems } from '@/features/system-settings/security/section-registry.tsx'
 import { getSiteSectionNavItems } from '@/features/system-settings/site/section-registry.tsx'
-import { getCustomIntegrationsSectionNavItems } from '@/features/custom-integrations/section-registry.tsx'
 import { type NavGroup } from '../types'
 
 /**
@@ -67,8 +67,8 @@ export function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
           items: getOperationsSectionNavItems(t),
         },
         {
-          title: t('Integrations'),
-          icon: Link,
+          title: t('Add-on Features'),
+          icon: Puzzle,
           items: getCustomIntegrationsSectionNavItems(t),
         },
       ],
