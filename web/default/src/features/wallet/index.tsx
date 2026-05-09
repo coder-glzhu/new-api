@@ -20,6 +20,7 @@ import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from './components/dialogs/transfer-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
+import { RedemptionCodeCard } from './components/redemption-code-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletStatsCard } from './components/wallet-stats-card'
 import { DEFAULT_DISCOUNT_RATE } from './constants'
@@ -351,17 +352,26 @@ export function Wallet(props: WalletProps) {
             {/* Stats row */}
             <WalletStatsCard user={user} loading={userLoading} />
 
-            {/* My Subscriptions + Affiliate — always visible at top */}
+            {/* My Subscriptions + Affiliate + Redemption — always visible at top */}
             <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
               <MySubscriptionsCard
                 onAvailabilityChange={handleSubscriptionAvailabilityChange}
               />
-              <AffiliateRewardsCard
-                user={user}
-                affiliateLink={affiliateLink}
-                onTransfer={() => setTransferDialogOpen(true)}
-                loading={affiliateLoading}
-              />
+              <div className='flex flex-col gap-5'>
+                <AffiliateRewardsCard
+                  user={user}
+                  affiliateLink={affiliateLink}
+                  onTransfer={() => setTransferDialogOpen(true)}
+                  loading={affiliateLoading}
+                />
+                <RedemptionCodeCard
+                  redemptionCode={redemptionCode}
+                  onRedemptionCodeChange={setRedemptionCode}
+                  onRedeem={handleRedeem}
+                  redeeming={redeeming}
+                  topupLink={topupInfo?.topup_link}
+                />
+              </div>
             </div>
 
             {/* Tab: Subscription Plans / Recharge */}
@@ -400,11 +410,6 @@ export function Wallet(props: WalletProps) {
                     calculating={calculating}
                     onPaymentMethodSelect={handlePaymentMethodSelect}
                     paymentLoading={paymentLoading}
-                    redemptionCode={redemptionCode}
-                    onRedemptionCodeChange={setRedemptionCode}
-                    onRedeem={handleRedeem}
-                    redeeming={redeeming}
-                    topupLink={topupInfo?.topup_link}
                     loading={topupLoading}
                     priceRatio={(status?.price as number) || 1}
                     usdExchangeRate={effectiveUsdExchangeRate}
