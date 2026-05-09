@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -143,11 +144,25 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordRegisterDisabled)
 		return
 	}
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
+	}
+	var user model.User
+	if err := common.Unmarshal(body, &user); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	// 兼容前端使用 "aff" 字段作为邀请码（model.User 的 JSON tag 是 aff_code）
+	if user.AffCode == "" {
+		var extra struct {
+			Aff string `json:"aff"`
+		}
+		_ = common.Unmarshal(body, &extra)
+		if extra.Aff != "" {
+			user.AffCode = extra.Aff
+		}
 	}
 	if err := common.Validate.Struct(&user); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})

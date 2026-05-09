@@ -26,12 +26,6 @@ import { getLuckyBagStatus, enterLuckyBag, getLuckyBagHistory, markLuckyBagViewe
 import { useNextDrawCountdown } from './hooks'
 import type { LuckyBagActivity, LuckyBagResultCard, LuckyBagStatusResponse } from './types'
 
-const DRAW_SLOTS = [
-  { hour: 9, label: '09:00' },
-  { hour: 12, label: '12:00' },
-  { hour: 17, label: '17:00' },
-]
-
 function pad(n: number) {
   return n.toString().padStart(2, '0')
 }
@@ -54,26 +48,43 @@ function CountdownBlock({ value, label }: { value: number; label: string }) {
 function TodaySlotsTimeline({
   activities,
   nextHour,
+  nextMinute,
 }: {
   activities: LuckyBagActivity[]
   nextHour: number
+  nextMinute: number
 }) {
   const { t } = useTranslation()
-  const activityMap = new Map(activities.map((a) => [a.slot_hour, a]))
+  const slots = [...activities]
+    .sort((a, b) => (a.slot_hour - b.slot_hour) || (a.slot_minute - b.slot_minute))
+    .map((a) => ({
+      hour: a.slot_hour,
+      minute: a.slot_minute,
+      label: `${pad(a.slot_hour)}:${pad(a.slot_minute)}`,
+    }))
 
   return (
     <div className='flex items-stretch gap-0'>
-      {DRAW_SLOTS.map((slot, idx) => {
-        const activity = activityMap.get(slot.hour)
+      {slots.map((slot, idx) => {
+        const activity = activities.find(
+          (a) => a.slot_hour === slot.hour && a.slot_minute === slot.minute
+        )
         const isDrawn = activity?.status === 'drawn'
-        const isNext = slot.hour === nextHour
-        const isPast = !isNext && !isDrawn && (() => {
-          const now = new Date()
-          return now.getHours() >= slot.hour
-        })()
+        const slotKey = slot.hour * 60 + slot.minute
+        const now = new Date()
+        const nowKey = now.getHours() * 60 + now.getMinutes()
+        const isPastTime = nowKey >= slotKey
+        // 下一场：匹配倒计时指向的场次，且未开奖、未过时
+        const isNext =
+          !isDrawn &&
+          !isPastTime &&
+          slot.hour === nextHour &&
+          slot.minute === nextMinute
+        // 过期但还未开奖：管理员刚配置的历史时间点，等待 task 补开奖
+        const isAwaitingDraw = !isDrawn && isPastTime
 
         return (
-          <div key={slot.hour} className='flex flex-1 flex-col items-center gap-2'>
+          <div key={`${slot.hour}-${slot.minute}`} className='flex flex-1 flex-col items-center gap-2'>
             {/* Connector line */}
             <div className='flex w-full items-center'>
               <div className={cn('h-px flex-1', idx === 0 ? 'bg-transparent' : isDrawn ? 'bg-yellow-400/50' : 'bg-white/20')} />
@@ -83,9 +94,7 @@ function TodaySlotsTimeline({
                   ? 'border-yellow-400 bg-yellow-400/20 text-yellow-300'
                   : isNext
                     ? 'border-white bg-white/20 text-white shadow-lg shadow-white/20 animate-pulse'
-                    : isPast
-                      ? 'border-white/30 bg-white/5 text-white/40'
-                      : 'border-white/30 bg-white/5 text-white/40'
+                    : 'border-white/30 bg-white/5 text-white/40'
               )}>
                 {isDrawn ? (
                   <Trophy className='size-3.5' />
@@ -95,7 +104,7 @@ function TodaySlotsTimeline({
                   <Gift className='size-3.5' />
                 )}
               </div>
-              <div className={cn('h-px flex-1', idx === DRAW_SLOTS.length - 1 ? 'bg-transparent' : isDrawn ? 'bg-yellow-400/50' : 'bg-white/20')} />
+              <div className={cn('h-px flex-1', idx === slots.length - 1 ? 'bg-transparent' : isDrawn ? 'bg-yellow-400/50' : 'bg-white/20')} />
             </div>
 
             {/* Label + status */}
@@ -103,14 +112,18 @@ function TodaySlotsTimeline({
               <p className={cn('text-xs font-bold', isDrawn ? 'text-yellow-300' : isNext ? 'text-white' : 'text-white/50')}>
                 {slot.label}
               </p>
-              {isDrawn && activity?.winner_name ? (
-                <p className='mt-0.5 text-[10px] text-yellow-300/80 truncate max-w-[5rem]'>
-                  {activity.winner_name}
-                </p>
+              {isDrawn ? (
+                activity?.winner_name ? (
+                  <p className='mt-0.5 text-[10px] text-yellow-300/80 truncate max-w-[5rem]'>
+                    {activity.winner_name}
+                  </p>
+                ) : (
+                  <p className='mt-0.5 text-[10px] text-yellow-300/60'>{t('No entries')}</p>
+                )
               ) : isNext ? (
                 <p className='mt-0.5 text-[10px] text-white/70'>{t('Next')}</p>
-              ) : isPast ? (
-                <p className='mt-0.5 text-[10px] text-white/40'>{t('No entries')}</p>
+              ) : isAwaitingDraw ? (
+                <p className='mt-0.5 text-[10px] text-white/50'>{t('Drawing...')}</p>
               ) : (
                 <p className='mt-0.5 text-[10px] text-white/40'>{t('Upcoming')}</p>
               )}
@@ -139,10 +152,14 @@ function HeroBanner({
   onDrawTime: () => void
 }) {
   const { t } = useTranslation()
-  const { hour: nextHour, h, m, s } = useNextDrawCountdown(onDrawTime)
+  const { hour: nextHour, minute: nextMinute, h, m, s } = useNextDrawCountdown(statusData?.draw_slots, onDrawTime)
   const nextActivity = statusData?.next_activity
   const isNextDrawn = nextActivity?.status === 'drawn'
   const todayActivities = statusData?.today_activities ?? []
+  const todayFinished = statusData?.today_finished ?? false
+  // 下一场是否是"明天"，用于判断是否显示"今日已结束"状态
+  const today = new Date().toISOString().slice(0, 10)
+  const nextIsTomorrow = !!nextActivity && nextActivity.draw_date > today
 
   return (
     <div className='relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-6 sm:p-8'>
@@ -188,7 +205,19 @@ function HeroBanner({
                 <Sparkles className='size-4 text-yellow-300' />
                 <h1 className='text-xl font-bold text-white sm:text-2xl'>{t('Lucky Bag')}</h1>
               </div>
-              <p className='mt-0.5 text-sm text-white/70'>{t('3 draws daily — 09:00 · 12:00 · 17:00')}</p>
+              <p className='mt-0.5 text-sm text-white/70'>
+                {(() => {
+                  const slots = statusData?.draw_slots ?? [
+                    { hour: 9, minute: 0 },
+                    { hour: 12, minute: 0 },
+                    { hour: 17, minute: 0 },
+                  ]
+                  return t('{{count}} draws daily — {{slots}}', {
+                    count: slots.length,
+                    slots: slots.map((sl) => `${pad(sl.hour)}:${pad(sl.minute)}`).join(' · '),
+                  })
+                })()}
+              </p>
               <div className='mt-1.5 flex items-center gap-2'>
                 <Users className='size-3 text-white/60' />
                 <span className='text-xs text-white/70'>
@@ -201,7 +230,9 @@ function HeroBanner({
           <div className='flex flex-col items-start gap-3 sm:items-end'>
             <div>
               <p className='text-[10px] font-medium uppercase tracking-wider text-white/60 mb-1.5 sm:text-right'>
-                {t('Next draw in')} ({pad(nextHour)}:00)
+                {todayFinished
+                  ? t('Next draw: Tomorrow {{slot}}', { slot: `${pad(nextHour)}:${pad(nextMinute)}` })
+                  : `${t('Next draw in')} (${pad(nextHour)}:${pad(nextMinute)})`}
               </p>
               <div className='flex items-end gap-1.5'>
                 <CountdownBlock value={h} label={t('Hours')} />
@@ -212,32 +243,51 @@ function HeroBanner({
               </div>
             </div>
 
-            <motion.div whileTap={{ scale: 0.95 }}>
-              <Button
-                onClick={onEnter}
-                disabled={entered || entering || isNextDrawn}
-                className={cn(
-                  'h-10 rounded-xl px-6 font-semibold shadow-lg transition-all',
-                  entered || isNextDrawn
-                    ? 'cursor-default border border-white/30 bg-white/20 text-white/70 hover:bg-white/20'
-                    : 'bg-white text-violet-700 hover:bg-white/90'
-                )}
-              >
-                {entered ? (
-                  <span className='flex items-center gap-1.5'>
-                    <CheckCircle2 className='size-4' />
-                    {t("You're In!")}
-                  </span>
-                ) : isNextDrawn ? (
-                  t('Already drawn')
-                ) : (
-                  <span className='flex items-center gap-1.5'>
-                    <Zap className='size-4' />
-                    {t('Enter Lucky Bag Draw')}
-                  </span>
-                )}
-              </Button>
-            </motion.div>
+            <div className='flex flex-col items-start gap-1 sm:items-end'>
+              <motion.div whileTap={{ scale: 0.95 }}>
+                <Button
+                  onClick={onEnter}
+                  disabled={todayFinished || entered || entering || isNextDrawn}
+                  className={cn(
+                    'h-10 rounded-xl px-6 font-semibold shadow-lg transition-all',
+                    todayFinished || entered || isNextDrawn
+                      ? 'cursor-default border border-white/30 bg-white/20 text-white/70 hover:bg-white/20'
+                      : 'bg-white text-violet-700 hover:bg-white/90'
+                  )}
+                >
+                  {todayFinished ? (
+                    <span className='flex items-center gap-1.5'>
+                      <Clock className='size-4' />
+                      {t("Today's draws finished")}
+                    </span>
+                  ) : entered ? (
+                    <span className='flex items-center gap-1.5'>
+                      <CheckCircle2 className='size-4' />
+                      {t("You're In!")}
+                    </span>
+                  ) : isNextDrawn ? (
+                    t('Already drawn')
+                  ) : (
+                    <span className='flex items-center gap-1.5'>
+                      <Zap className='size-4' />
+                      {t('Enter Lucky Bag Draw')}
+                    </span>
+                  )}
+                </Button>
+              </motion.div>
+              {todayFinished ? (
+                <p className='text-[10px] text-white/60'>
+                  {t('Come back tomorrow for the next round 🎁')}
+                </p>
+              ) : entered && nextActivity ? (
+                <p className='text-[10px] text-white/50'>
+                  {t('Registered for {{date}} {{slot}}', {
+                    date: nextIsTomorrow ? t('tomorrow') : nextActivity.draw_date,
+                    slot: `${pad(nextActivity.slot_hour)}:${pad(nextActivity.slot_minute)}`,
+                  })}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -247,7 +297,7 @@ function HeroBanner({
             <p className='mb-3 text-[10px] font-medium uppercase tracking-wider text-white/50'>
               {t("Today's Schedule")}
             </p>
-            <TodaySlotsTimeline activities={todayActivities} nextHour={nextHour} />
+            <TodaySlotsTimeline activities={todayActivities} nextHour={nextHour} nextMinute={nextMinute} />
           </div>
         )}
       </div>
@@ -351,15 +401,15 @@ function ResultDialog({
                     <div className='text-center'>
                       <div className='flex items-center justify-center gap-1.5'>
                         <Sparkles className='size-4 text-yellow-300' />
-                        <span className='text-xl font-bold text-white'>恭喜中奖！</span>
+                        <span className='text-xl font-bold text-white'>{t('Congratulations, you won!')}</span>
                         <Sparkles className='size-4 text-yellow-300' />
                       </div>
                       <p className='mt-0.5 text-sm text-yellow-200/70'>
-                        {card.activity.draw_date} · {pad(card.activity.slot_hour)}:00 场次
+                        {card.activity.draw_date} · {pad(card.activity.slot_hour)}:{pad(card.activity.slot_minute)} {t('Session')}
                       </p>
                     </div>
                     <div className='rounded-xl border border-yellow-400/30 bg-black/20 px-5 py-2 text-center'>
-                      <p className='text-xs font-medium text-yellow-300/70'>奖励金额</p>
+                      <p className='text-xs font-medium text-yellow-300/70'>{t('Prize Amount')}</p>
                       <p className='text-3xl font-bold tabular-nums text-white'>{formatQuota(card.activity.winner_quota)}</p>
                     </div>
                   </div>
@@ -367,25 +417,25 @@ function ResultDialog({
                   {/* Code */}
                   <div className='h-px bg-yellow-400/20' />
                   <div>
-                    <p className='mb-2 text-xs font-semibold uppercase tracking-wider text-yellow-300/70'>兑换码</p>
-                    <div className='flex items-center gap-2 rounded-xl border border-yellow-400/30 bg-black/25 p-1 pl-4'>
-                      <span className='flex-1 font-mono text-sm font-bold tracking-widest text-yellow-100 select-all'>
+                    <p className='mb-2 text-xs font-semibold uppercase tracking-wider text-yellow-300/70'>{t('Redemption Code')}</p>
+                    <div className='rounded-xl border border-yellow-400/30 bg-black/25 p-3'>
+                      <p className='font-mono text-xs font-semibold leading-relaxed break-all text-yellow-100 select-all'>
                         {card.activity.winner_code}
-                      </span>
+                      </p>
                       <motion.button
-                        whileTap={{ scale: 0.93 }}
+                        whileTap={{ scale: 0.96 }}
                         onClick={handleCopy}
-                        className='flex shrink-0 items-center gap-1 rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-amber-900 transition-colors hover:bg-yellow-300 cursor-pointer'
+                        className='mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-yellow-400 py-2 text-xs font-bold text-amber-900 transition-colors hover:bg-yellow-300 cursor-pointer'
                       >
                         <AnimatePresence mode='wait'>
                           {copied
-                            ? <motion.span key='d' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='flex items-center gap-1'><Check className='size-3' />已复制</motion.span>
-                            : <motion.span key='c' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='flex items-center gap-1'><Copy className='size-3' />复制</motion.span>
+                            ? <motion.span key='d' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='flex items-center gap-1.5'><Check className='size-3.5' />{t('Copied')}</motion.span>
+                            : <motion.span key='c' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='flex items-center gap-1.5'><Copy className='size-3.5' />{t('Copy Code')}</motion.span>
                           }
                         </AnimatePresence>
                       </motion.button>
                     </div>
-                    <p className='mt-2 text-xs text-yellow-300/60'>前往「钱包」→ 兑换码，输入上方兑换码即可到账</p>
+                    <p className='mt-2 text-xs text-yellow-300/60'>{t('Go to Wallet → Redemption Code, enter the code above to receive your credit')}</p>
                   </div>
                 </div>
               </div>
@@ -400,19 +450,19 @@ function ResultDialog({
                     <HeartCrack className='size-7 text-violet-400' />
                   </div>
                   <div>
-                    <p className='text-base font-semibold'>很遗憾，未中奖</p>
+                    <p className='text-base font-semibold'>{t('Sorry, you didn\'t win this time')}</p>
                     <p className='text-muted-foreground mt-1 text-sm'>
-                      {card.activity.draw_date} · {pad(card.activity.slot_hour)}:00 场次
+                      {card.activity.draw_date} · {pad(card.activity.slot_hour)}:{pad(card.activity.slot_minute)} {t('Session')}
                     </p>
                   </div>
                   <div className='bg-muted/50 w-full rounded-xl px-4 py-3 text-sm'>
-                    <span className='text-muted-foreground'>本次中奖：</span>
+                    <span className='text-muted-foreground'>{t('Winner:')}</span>
                     <span className='font-medium'>{card.activity.winner_name || t('Anonymous')}</span>
                     <span className='text-muted-foreground mx-1'>·</span>
                     <span className='font-medium'>{formatQuota(card.activity.winner_quota)}</span>
                   </div>
-                  <p className='text-muted-foreground text-xs'>下次记得早点报名，祝好运 🤞</p>
-                  <Button variant='outline' className='w-full' onClick={onClose}>知道了</Button>
+                  <p className='text-muted-foreground text-xs'>{t('Remember to enter earlier next time, good luck! 🤞')}</p>
+                  <Button variant='outline' className='w-full' onClick={onClose}>{t('Got it')}</Button>
                 </div>
               </div>
             )}
@@ -424,10 +474,21 @@ function ResultDialog({
 }
 
 // ─── Rules Card ───────────────────────────────────────────────────────────────
-function RulesCard() {
+function RulesCard({ drawSlots }: { drawSlots?: { hour: number; minute: number }[] }) {
   const { t } = useTranslation()
+  const slots =
+    drawSlots && drawSlots.length > 0
+      ? drawSlots
+      : [
+          { hour: 9, minute: 0 },
+          { hour: 12, minute: 0 },
+          { hour: 17, minute: 0 },
+        ]
   const rules = [
-    t('3 draws per day — 09:00, 12:00, 17:00'),
+    t('{{count}} draws per day — {{slots}}', {
+      count: slots.length,
+      slots: slots.map((s) => `${pad(s.hour)}:${pad(s.minute)}`).join(', '),
+    }),
     t('Enter each draw separately before the draw time'),
     t('One winner is selected daily via weighted random draw'),
     t('Winners receive a redemption code in the draw history'),
@@ -455,6 +516,7 @@ function RulesCard() {
 
 // ─── History Table ────────────────────────────────────────────────────────────
 function HistoryRowCode({ a }: { a: LuckyBagActivity }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const isUsed = a.winner_code_status === 3
   const handleCopy = async () => {
@@ -473,14 +535,14 @@ function HistoryRowCode({ a }: { a: LuckyBagActivity }) {
           ? 'bg-muted text-muted-foreground'
           : 'bg-green-500/10 text-green-700 dark:text-green-400'
       )}>
-        {isUsed ? '已使用' : '未使用'}
+        {isUsed ? t('Used') : t('Unused')}
       </span>
       {!isUsed && (
         <button
           onClick={handleCopy}
           className='flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer'
         >
-          {copied ? <><Check className='size-3' />已复制</> : <><Copy className='size-3' />复制</>}
+          {copied ? <><Check className='size-3' />{t('Copied')}</> : <><Copy className='size-3' />{t('Copy')}</>}
         </button>
       )}
     </div>
@@ -558,7 +620,7 @@ function HistoryCard({
                         {isMyWin && <span className='ml-1.5 text-xs font-normal text-yellow-600 dark:text-yellow-400'>（我）</span>}
                       </span>
                       <span className='text-muted-foreground ml-2 text-xs'>
-                        {a.draw_date} {pad(a.slot_hour)}:00
+                        {a.draw_date} {pad(a.slot_hour)}:{pad(a.slot_minute)}
                       </span>
                     </div>
                   </div>
@@ -628,24 +690,33 @@ export function LuckyBag() {
   const [dialogCard, setDialogCard] = useState<LuckyBagResultCard | null>(null)
 
   const fetchStatus = useCallback(async (autoPopDialog = false) => {
+    console.log('[LuckyBag] fetchStatus called', { autoPopDialog })
     try {
       const res = await getLuckyBagStatus()
+      console.log('[LuckyBag] fetchStatus response', {
+        success: res.success,
+        entered: res.data?.entered,
+        nextActivity: res.data?.next_activity ? `id=${res.data.next_activity.id} ${res.data.next_activity.draw_date} ${pad(res.data.next_activity.slot_hour)}:${pad(res.data.next_activity.slot_minute)} status=${res.data.next_activity.status}` : null,
+        resultCards: res.data?.result_cards?.map(c => `id=${c.activity.id} winner=${c.is_winner} viewed=${c.winner_viewed} status=${c.activity.status}`),
+        drawSlots: res.data?.draw_slots,
+      })
       if (res.success && res.data) {
         setStatusData(res.data)
         setEntered(res.data.entered)
-        // 自动弹窗：只弹今天未查看过的中奖结果
+        // 自动弹窗：用户报名过且未查看过的当日开奖结果（中奖/未中奖都弹）
         if (autoPopDialog) {
           const today = new Date().toISOString().slice(0, 10)
           const todayCard = (res.data.result_cards ?? []).find(
-            c => c.activity.draw_date === today && c.is_winner && !c.winner_viewed
+            c => c.activity.draw_date === today && !c.winner_viewed
           )
+          console.log('[LuckyBag] fetchStatus autoPopDialog today=', today, 'todayCard=', todayCard ?? null)
           if (todayCard) {
             setDialogCard(todayCard)
           }
         }
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error('[LuckyBag] fetchStatus error', e)
     } finally {
       setStatusLoading(false)
     }
@@ -673,9 +744,11 @@ export function LuckyBag() {
 
   const handleEnter = async () => {
     if (entering || entered) return
+    console.log('[LuckyBag] handleEnter: submitting entry')
     setEntering(true)
     try {
       const res = await enterLuckyBag()
+      console.log('[LuckyBag] handleEnter response', { success: res.success, message: res.message, entry: res.data?.entry })
       if (res.success) {
         setEntered(true)
         toast.success(t('Successfully entered the draw!'))
@@ -683,7 +756,8 @@ export function LuckyBag() {
       } else {
         toast.error(res.message || t('Failed to enter'))
       }
-    } catch {
+    } catch (e) {
+      console.error('[LuckyBag] handleEnter error', e)
       toast.error(t('Request failed'))
     } finally {
       setEntering(false)
@@ -694,6 +768,74 @@ export function LuckyBag() {
     setHistoryPage(page)
     fetchHistory(page)
   }
+
+  // 倒计时跨越开奖时刻后，后端已在开奖前 1 分钟把结果写入 DB
+  // 到点立即请求一次即可拿到结果；为了抵消时钟偏差/网络延迟，最多再重试几次
+  const handleDrawTime = useCallback(() => {
+    const maxAttempts = 6
+    let attempts = 0
+    const drawSlots = statusData?.draw_slots ?? [
+      { hour: 9, minute: 0 },
+      { hour: 12, minute: 0 },
+      { hour: 17, minute: 0 },
+    ]
+    const now = new Date()
+    const nowKey = now.getHours() * 60 + now.getMinutes()
+    const lastPassed = (() => {
+      let best: { hour: number; minute: number } | null = null
+      for (const s of drawSlots) {
+        if (nowKey >= s.hour * 60 + s.minute) {
+          if (!best || (s.hour * 60 + s.minute) > (best.hour * 60 + best.minute)) {
+            best = { hour: s.hour, minute: s.minute }
+          }
+        }
+      }
+      return best
+    })()
+    console.log('[LuckyBag] handleDrawTime fired', { nowKey, drawSlots, lastPassed })
+    const check = async () => {
+      attempts += 1
+      console.log(`[LuckyBag] handleDrawTime check attempt=${attempts}/${maxAttempts}`, { lastPassed })
+      try {
+        const res = await getLuckyBagStatus()
+        if (res.success && res.data) {
+          setStatusData(res.data)
+          setEntered(res.data.entered)
+          const today = new Date().toISOString().slice(0, 10)
+          const latest = lastPassed && (res.data.today_activities ?? []).find(
+            a => a.draw_date === today && a.slot_hour === lastPassed.hour && a.slot_minute === lastPassed.minute
+          )
+          console.log('[LuckyBag] handleDrawTime check result', {
+            attempt: attempts,
+            latestSlotStatus: latest?.status ?? 'not found',
+            resultCards: res.data.result_cards?.map(c => `id=${c.activity.id} winner=${c.is_winner} viewed=${c.winner_viewed}`),
+          })
+          if (latest && latest.status === 'drawn') {
+            // 用户报名过刚过去这场：必须弹窗（中奖或未中奖）
+            const card = (res.data.result_cards ?? []).find(
+              c => c.activity.draw_date === today &&
+                c.activity.slot_hour === lastPassed!.hour &&
+                c.activity.slot_minute === lastPassed!.minute &&
+                !c.winner_viewed
+            )
+            console.log('[LuckyBag] handleDrawTime slot drawn, card=', card ?? null)
+            if (card) setDialogCard(card)
+            fetchHistory(1)
+            return
+          }
+        }
+      } catch (e) {
+        console.warn('[LuckyBag] handleDrawTime check error (will retry)', e)
+      }
+      if (attempts < maxAttempts) {
+        console.log(`[LuckyBag] handleDrawTime not drawn yet, retrying in 3s (attempt ${attempts}/${maxAttempts})`)
+        setTimeout(check, 3000)
+      } else {
+        console.warn('[LuckyBag] handleDrawTime max attempts reached, giving up')
+      }
+    }
+    setTimeout(check, 500)
+  }, [fetchHistory, statusData?.draw_slots])
 
   return (
     <>
@@ -729,13 +871,13 @@ export function LuckyBag() {
                   participantCount={statusData?.participant_count ?? 0}
                   onEnter={handleEnter}
                   entering={entering}
-                  onDrawTime={() => { fetchStatus(true); fetchHistory(1) }}
+                  onDrawTime={handleDrawTime}
                 />
               </motion.div>
             </AnimatePresence>
           )}
 
-          <RulesCard />
+          <RulesCard drawSlots={statusData?.draw_slots} />
 
           <HistoryCard
             activities={historyActivities}

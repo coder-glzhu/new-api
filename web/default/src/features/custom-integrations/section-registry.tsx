@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next'
 import { createSectionRegistry } from '@/features/system-settings/utils/section-registry'
+import { LuckyBagSection } from './lucky-bag-section'
 import { WechatBotSection } from './wechat-bot-section'
 import type { CustomIntegrationSettings } from './types'
 
@@ -16,6 +17,28 @@ const CUSTOM_INTEGRATIONS_SECTIONS = [
           WechatBotGroupIds: settings.WechatBotGroupIds ?? '',
           WechatBotReminderContent: settings.WechatBotReminderContent ?? '',
           WechatBotResultContent: settings.WechatBotResultContent ?? '',
+          LuckyBagDrawHours: settings.LuckyBagDrawHours ?? '9,12,17',
+          LuckyBagMinUsd: settings.LuckyBagMinUsd ?? '1',
+          LuckyBagMaxUsd: settings.LuckyBagMaxUsd ?? '10',
+        }}
+      />
+    ),
+  },
+  {
+    id: 'lucky-bag',
+    titleKey: 'Lucky Bag',
+    descriptionKey: 'Configure lucky bag draw times',
+    build: (settings: CustomIntegrationSettings) => (
+      <LuckyBagSection
+        defaultValues={{
+          WechatBotEnabled: settings.WechatBotEnabled ?? false,
+          WechatBotUserId: settings.WechatBotUserId ?? '',
+          WechatBotGroupIds: settings.WechatBotGroupIds ?? '',
+          WechatBotReminderContent: settings.WechatBotReminderContent ?? '',
+          WechatBotResultContent: settings.WechatBotResultContent ?? '',
+          LuckyBagDrawHours: settings.LuckyBagDrawHours ?? '9,12,17',
+          LuckyBagMinUsd: settings.LuckyBagMinUsd ?? '1',
+          LuckyBagMaxUsd: settings.LuckyBagMaxUsd ?? '10',
         }}
       />
     ),

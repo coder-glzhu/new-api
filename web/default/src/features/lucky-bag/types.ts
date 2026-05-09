@@ -1,7 +1,8 @@
 export interface LuckyBagActivity {
   id: number
   draw_date: string
-  slot_hour: number   // 9 | 12 | 17
+  slot_hour: number   // 0~23
+  slot_minute: number // 0~59
   min_quota: number
   max_quota: number
   status: 'pending' | 'drawn'
@@ -13,6 +14,11 @@ export interface LuckyBagActivity {
   created_at: number
   // 仅历史记录中当前用户中奖时有值：1=未使用 3=已使用 0=非本人中奖
   winner_code_status?: number
+}
+
+export interface DrawSlot {
+  hour: number
+  minute: number
 }
 
 export interface LuckyBagEntry {
@@ -36,6 +42,8 @@ export interface LuckyBagStatusResponse {
   weight: number
   participant_count: number
   result_cards: LuckyBagResultCard[] | null
+  draw_slots: DrawSlot[]
+  today_finished: boolean
 }
 
 export interface LuckyBagHistoryResponse {

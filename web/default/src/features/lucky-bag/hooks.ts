@@ -1,23 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
+import type { DrawSlot } from './types'
 
-const DRAW_HOURS = [9, 12, 17]
+const DEFAULT_DRAW_SLOTS: DrawSlot[] = [
+  { hour: 9, minute: 0 },
+  { hour: 12, minute: 0 },
+  { hour: 17, minute: 0 },
+]
 
-// 返回距下一场开奖的剩余秒数和下一场的小时
+const slotKey = (s: DrawSlot) => s.hour * 60 + s.minute
+
+// 返回距下一场开奖的剩余时间和下一场的 hour/minute
+// drawSlots: 后端 status 接口返回的 draw_slots；默认 [{9,0},{12,0},{17,0}]
 // onDrawTime: 每当倒计时跨越一个开奖时刻时触发（可用于主动拉取最新开奖结果）
-export function useNextDrawCountdown(onDrawTime?: () => void) {
+export function useNextDrawCountdown(
+  drawSlots: DrawSlot[] | undefined,
+  onDrawTime?: () => void
+) {
+  const slots = drawSlots && drawSlots.length > 0 ? drawSlots : DEFAULT_DRAW_SLOTS
+
   const calc = () => {
     const now = new Date()
-    const h = now.getHours()
-    const m = now.getMinutes()
-    const s = now.getSeconds()
-    const nowSec = h * 3600 + m * 60 + s
+    const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
 
-    for (const dh of DRAW_HOURS) {
-      const drawSec = dh * 3600
+    for (const slot of slots) {
+      const drawSec = slot.hour * 3600 + slot.minute * 60
       if (nowSec < drawSec) {
         const diff = drawSec - nowSec
         return {
-          hour: dh,
+          hour: slot.hour,
+          minute: slot.minute,
           h: Math.floor(diff / 3600),
           m: Math.floor((diff % 3600) / 60),
           s: diff % 60,
@@ -25,12 +36,13 @@ export function useNextDrawCountdown(onDrawTime?: () => void) {
         }
       }
     }
-    // 今天所有场次已过，到明天第一场
-    const tomorrowFirst = DRAW_HOURS[0] * 3600
+    const first = slots[0]
+    const tomorrowFirst = first.hour * 3600 + first.minute * 60
     const secondsInDay = 24 * 3600
     const diff = secondsInDay - nowSec + tomorrowFirst
     return {
-      hour: DRAW_HOURS[0],
+      hour: first.hour,
+      minute: first.minute,
       h: Math.floor(diff / 3600),
       m: Math.floor((diff % 3600) / 60),
       s: diff % 60,
@@ -39,29 +51,31 @@ export function useNextDrawCountdown(onDrawTime?: () => void) {
   }
 
   const [state, setState] = useState(calc)
-  // 用"上一次的 diff 秒数"来判断：diff 从 >0 变成 diff 很大（跳到下一天）或从小变大
-  // 更可靠的方案：记录上一次 nextHour 和对应日期，只有同一天内 hour 变化才触发
-  const prevNextHourRef = useRef(state.hour)
-  const prevDiffRef = useRef(state.diff)
+  const prevKeyRef = useRef(slotKey({ hour: state.hour, minute: state.minute }))
   const onDrawTimeRef = useRef(onDrawTime)
   onDrawTimeRef.current = onDrawTime
+  const slotsKey = slots.map(slotKey).join(',')
+
+  useEffect(() => {
+    const next = calc()
+    setState(next)
+    prevKeyRef.current = slotKey(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotsKey])
 
   useEffect(() => {
     const id = setInterval(() => {
       const next = calc()
       setState(next)
-      const prevHour = prevNextHourRef.current
-      const prevDiff = prevDiffRef.current
-      // 只有当倒计时真正归零跨越（diff 从接近0变大，且 hour 变化）才触发
-      // 排除跨天：跨天时 diff 会从很小的数跳到很大的数（> 3600）
-      if (next.hour !== prevHour && prevDiff <= 60 && next.diff > prevDiff) {
+      const nextKey = slotKey(next)
+      if (nextKey !== prevKeyRef.current) {
         onDrawTimeRef.current?.()
       }
-      prevNextHourRef.current = next.hour
-      prevDiffRef.current = next.diff
+      prevKeyRef.current = nextKey
     }, 1000)
     return () => clearInterval(id)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotsKey])
 
   return state
 }

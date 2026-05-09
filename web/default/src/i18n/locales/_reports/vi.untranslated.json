@@ -15,10 +15,17 @@
   "Automatically send lucky bag reminders to configured WeChat groups": "Automatically send lucky bag reminders to configured WeChat groups",
   "The WeChat bot user ID used to send messages": "The WeChat bot user ID used to send messages",
   "Comma-separated WeChat group IDs to receive notifications": "Comma-separated WeChat group IDs to receive notifications",
+  "Leave empty to use default result text": "Leave empty to use default result text",
+  "Leave empty to use default reminder text": "Leave empty to use default reminder text",
+  "The message sent to groups 1 hour before each draw. Leave empty to use the built-in default.": "The message sent to groups 1 hour before each draw. Leave empty to use the built-in default.",
   "Failed to send test message": "Failed to send test message",
   "Enable Alipay checkout for wallet and subscriptions": "Enable Alipay checkout for wallet and subscriptions",
   "Leave blank to use the default webhook URL": "Leave blank to use the default webhook URL",
   "Leave callback URLs blank to let the backend use the server address when supported.": "Leave callback URLs blank to let the backend use the server address when supported.",
   "Scan the QR code or open the payment link to complete payment": "Scan the QR code or open the payment link to complete payment",
-  "Set to 0 to disable Alipay for this plan": "Set to 0 to disable Alipay for this plan"
+  "Set to 0 to disable Alipay for this plan": "Set to 0 to disable Alipay for this plan",
+  "Go to Wallet → Redemption Code, enter the code above to receive your credit": "Go to Wallet → Redemption Code, enter the code above to receive your credit",
+  "Remember to enter earlier next time, good luck! 🤞": "Remember to enter earlier next time, good luck! 🤞",
+  "Click a time to edit it. Changes take effect from the next minute.": "Click a time to edit it. Changes take effect from the next minute.",
+  "Please add at least one draw time": "Please add at least one draw time"
 }

@@ -1,25 +1,45 @@
 package controller
 
 import (
+	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
+// maskLockedActivity 把 locked 状态的活动对外伪装成 pending，隐藏已预计算但未到开奖时刻的 winner 字段
+func maskLockedActivity(a *model.LuckyBagActivity) {
+	if a == nil || a.Status != model.LuckyBagStatusLocked {
+		return
+	}
+	a.Status = model.LuckyBagStatusPending
+	a.WinnerUserId = 0
+	a.WinnerName = ""
+	a.WinnerQuota = 0
+	a.WinnerCode = ""
+	a.DrawnAt = 0
+}
+
 // LuckyBagStatus 返回今日三场活动、下一场状态、用户是否报名、权重预览、是否中奖
 func LuckyBagStatus(c *gin.Context) {
 	userId := c.GetInt("id")
+	ctx := context.Background()
+	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] LuckyBagStatus request userId=%d", userId))
 
 	todayActivities, err := model.GetTodayActivities()
 	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] LuckyBagStatus userId=%d: GetTodayActivities failed: %v", userId, err))
 		common.ApiError(c, err)
 		return
 	}
-	// 隐藏 winner_code：非本人中奖的场次不暴露兑换码
 	for i := range todayActivities {
+		maskLockedActivity(todayActivities[i])
+		// 非本人中奖的场次不暴露兑换码
 		if todayActivities[i].WinnerUserId != userId {
 			todayActivities[i].WinnerCode = ""
 		}
@@ -27,9 +47,11 @@ func LuckyBagStatus(c *gin.Context) {
 
 	entry, nextActivity, err := model.GetUserNextEntry(userId)
 	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] LuckyBagStatus userId=%d: GetUserNextEntry failed: %v", userId, err))
 		common.ApiError(c, err)
 		return
 	}
+	maskLockedActivity(nextActivity)
 
 	entered := entry != nil
 	var weight int
@@ -63,6 +85,26 @@ func LuckyBagStatus(c *gin.Context) {
 		})
 	}
 
+	// 判断今日抽奖是否全部结束：所有 today_activities 都已 drawn
+	todayFinished := len(todayActivities) > 0
+	for _, a := range todayActivities {
+		if a.Status != model.LuckyBagStatusDrawn {
+			todayFinished = false
+			break
+		}
+	}
+
+	nextId := 0
+	nextSlot := ""
+	nextStatus := ""
+	if nextActivity != nil {
+		nextId = nextActivity.Id
+		nextSlot = fmt.Sprintf("%02d:%02d", nextActivity.SlotHour, nextActivity.SlotMinute)
+		nextStatus = nextActivity.Status
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] LuckyBagStatus userId=%d: entered=%v weight=%d participants=%d nextActivityId=%d slot=%s status=%s resultCards=%d todayFinished=%v",
+		userId, entered, weight, participantCount, nextId, nextSlot, nextStatus, len(resultCards), todayFinished))
+
 	common.ApiSuccess(c, gin.H{
 		"today_activities":  todayActivities,
 		"next_activity":     nextActivity,
@@ -70,17 +112,23 @@ func LuckyBagStatus(c *gin.Context) {
 		"weight":            weight,
 		"participant_count": participantCount,
 		"result_cards":      resultCards,
+		"draw_slots":        model.GetDrawSlots(),
+		"today_finished":    todayFinished,
 	})
 }
 
 // EnterLuckyBag 用户报名下一场活动
 func EnterLuckyBag(c *gin.Context) {
 	userId := c.GetInt("id")
+	ctx := context.Background()
+	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] EnterLuckyBag API called userId=%d", userId))
 	entry, err := model.EnterLuckyBag(userId)
 	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] EnterLuckyBag userId=%d failed: %v", userId, err))
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
+	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] EnterLuckyBag userId=%d success entryId=%d activityId=%d weight=%d", userId, entry.Id, entry.ActivityId, entry.Weight))
 	common.ApiSuccess(c, gin.H{"entry": entry})
 }
 
@@ -174,16 +222,11 @@ func AdminDrawLuckyBag(c *gin.Context) {
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
-	// 发送开奖结果通知
+	// 发送开奖结果通知（通过 dispatch 原子领通知权；失败会在后台任务的补发分支里继续重试）
 	var activity model.LuckyBagActivity
 	if err := model.DB.First(&activity, req.ActivityId).Error; err == nil &&
-		activity.Status == "drawn" && activity.WinnerName != "" {
-		go func() {
-			_ = service.SendWechatDrawResult(
-				activity.WinnerName, activity.WinnerQuota,
-				activity.DrawDate, activity.SlotHour,
-			)
-		}()
+		activity.Status == model.LuckyBagStatusDrawn {
+		go service.DispatchLuckyBagNotify(&activity)
 	}
 	common.ApiSuccess(c, nil)
 }

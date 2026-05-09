@@ -199,6 +199,12 @@ func InitOptionMap() {
 	common.OptionMap["WechatBotReminderContent"] = ""
 	common.OptionMap["WechatBotResultContent"] = ""
 
+	// 福袋开奖时间（逗号分隔的整点小时，0~23）
+	common.OptionMap["LuckyBagDrawHours"] = "9,12,17"
+	// 福袋奖金区间（单位：美元）
+	common.OptionMap["LuckyBagMinUsd"] = "1"
+	common.OptionMap["LuckyBagMaxUsd"] = "10"
+
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
 }

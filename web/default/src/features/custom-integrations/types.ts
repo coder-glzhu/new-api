@@ -4,4 +4,7 @@ export type CustomIntegrationSettings = {
   WechatBotGroupIds: string
   WechatBotReminderContent: string
   WechatBotResultContent: string
+  LuckyBagDrawHours: string
+  LuckyBagMinUsd: string
+  LuckyBagMaxUsd: string
 }

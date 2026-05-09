@@ -11,6 +11,7 @@ const defaultSettings: CustomIntegrationSettings = {
   WechatBotGroupIds: '',
   WechatBotReminderContent: '',
   WechatBotResultContent: '',
+  LuckyBagDrawHours: '9,12,17',
 }
 
 export function CustomIntegrationsSettings() {
