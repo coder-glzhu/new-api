@@ -193,14 +193,6 @@ function HeroBanner({
                 <span className='text-xs text-white/70'>
                   {participantCount} {t('Participants')}
                 </span>
-                {nextActivity && (
-                  <>
-                    <span className='text-white/30'>·</span>
-                    <span className='text-xs text-white/70'>
-                      {t('Prize')}: {formatQuota(nextActivity.min_quota)}–{formatQuota(nextActivity.max_quota)}
-                    </span>
-                  </>
-                )}
               </div>
             </div>
           </div>
