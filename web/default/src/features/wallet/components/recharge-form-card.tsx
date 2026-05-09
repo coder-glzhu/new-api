@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Receipt, WalletCards } from 'lucide-react'
+import { Receipt, WalletCards, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'

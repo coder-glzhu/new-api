@@ -258,11 +258,20 @@ export function Wallet(props: WalletProps) {
       const payment = await processHupijiaoPayment(topupAmount)
       if (payment) {
         setConfirmDialogOpen(false)
-        setHupijiaoPayment({
-          ...payment,
-          create_time: Math.floor(Date.now() / 1000),
-        })
-        setHupijiaoDialogOpen(true)
+        const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent
+        )
+        if (mobile && payment.pay_url) {
+          // Mobile: redirect directly — browser will try to open Alipay app, falls back to H5
+          window.location.href = payment.pay_url
+        } else {
+          // PC: show QR code dialog for scanning
+          setHupijiaoPayment({
+            ...payment,
+            create_time: Math.floor(Date.now() / 1000),
+          })
+          setHupijiaoDialogOpen(true)
+        }
       }
       return
     }
