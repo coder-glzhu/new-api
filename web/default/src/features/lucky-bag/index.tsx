@@ -155,6 +155,7 @@ function HeroBanner({
   const { hour: nextHour, minute: nextMinute, h, m, s } = useNextDrawCountdown(statusData?.draw_slots, onDrawTime)
   const nextActivity = statusData?.next_activity
   const isNextDrawn = nextActivity?.status === 'drawn'
+  const nextLocked = statusData?.next_locked ?? false
   const todayActivities = statusData?.today_activities ?? []
   const todayFinished = statusData?.today_finished ?? false
   // 下一场是否是"明天"，用于判断是否显示"今日已结束"状态
@@ -247,10 +248,10 @@ function HeroBanner({
               <motion.div whileTap={{ scale: 0.95 }}>
                 <Button
                   onClick={onEnter}
-                  disabled={todayFinished || entered || entering || isNextDrawn}
+                  disabled={todayFinished || nextLocked || entered || entering || isNextDrawn}
                   className={cn(
                     'h-10 rounded-xl px-6 font-semibold shadow-lg transition-all',
-                    todayFinished || entered || isNextDrawn
+                    todayFinished || nextLocked || entered || isNextDrawn
                       ? 'cursor-default border border-white/30 bg-white/20 text-white/70 hover:bg-white/20'
                       : 'bg-white text-violet-700 hover:bg-white/90'
                   )}
@@ -264,6 +265,11 @@ function HeroBanner({
                     <span className='flex items-center gap-1.5'>
                       <CheckCircle2 className='size-4' />
                       {t("You're In!")}
+                    </span>
+                  ) : nextLocked ? (
+                    <span className='flex items-center gap-1.5'>
+                      <Clock className='size-4' />
+                      {t('Drawing soon')}
                     </span>
                   ) : isNextDrawn ? (
                     t('Already drawn')

@@ -123,20 +123,21 @@ type LuckyBagEntry struct {
 	CreatedAt     int64 `json:"created_at" gorm:"bigint;autoCreateTime"`
 }
 
-// nextDrawSlot 返回下一场开奖的 (date, slot)
-// 开奖前 1 分钟开始，当前场次进入预开奖状态，"下一场"直接推到再下一场
-// 若当天所有场次已过，返回明天第一场
+// nextDrawSlot 返回"下一场"的 (date, slot)
+// 定义：今日尚未到开奖时刻（nowKey < slotKey）的第一场；若全部已到点/过点，返回明天第一场。
+//
+// 注意：这里不能用 `nowKey >= slotKey - 1` 跳过预开奖场次，否则开奖前 1 分钟内
+// 前端刷新会看到"下一场 = 明天 09:00"，参与人数变 0、按钮又能点击，彻底混乱。
+// 预开奖状态应由 GetNextActivity 读取 DB status 后判断（locked 场次仍返回自己）。
 func nextDrawSlot() (date string, slot DrawSlot) {
 	now := time.Now()
 	today := now.Format("2006-01-02")
 	nowKey := now.Hour()*60 + now.Minute()
 	slots := GetDrawSlots()
 	for _, s := range slots {
-		// s 场次已进入预开奖（提前 1 分钟）或已到点，跳过
-		if nowKey >= s.Key()-1 {
-			continue
+		if nowKey < s.Key() {
+			return today, s
 		}
-		return today, s
 	}
 	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
 	return tomorrow, slots[0]
@@ -348,6 +349,10 @@ func EnterLuckyBag(userId int) (*LuckyBagEntry, error) {
 		return nil, errors.New("今日抽奖已结束，请明天再来")
 	}
 
+	if activity.Status == LuckyBagStatusLocked {
+		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] EnterLuckyBag userId=%d rejected: activity %d is locked (pre-drawing)", userId, activity.Id))
+		return nil, errors.New("即将开奖，本场报名已截止")
+	}
 	if activity.Status != LuckyBagStatusPending {
 		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] EnterLuckyBag userId=%d rejected: activity %d status=%s (not pending)", userId, activity.Id, activity.Status))
 		return nil, errors.New("该场次已开奖，请等待下一场")

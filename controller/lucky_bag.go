@@ -51,6 +51,8 @@ func LuckyBagStatus(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// locked = 预开奖中（开奖前 1 分钟到开奖时刻之间）；对外表现为 pending，但前端据此禁用报名
+	nextLocked := nextActivity != nil && nextActivity.Status == model.LuckyBagStatusLocked
 	maskLockedActivity(nextActivity)
 
 	entered := entry != nil
@@ -114,6 +116,7 @@ func LuckyBagStatus(c *gin.Context) {
 		"result_cards":      resultCards,
 		"draw_slots":        model.GetDrawSlots(),
 		"today_finished":    todayFinished,
+		"next_locked":       nextLocked,
 	})
 }
 
