@@ -1,6 +1,7 @@
 export interface LuckyBagActivity {
   id: number
   draw_date: string
+  slot_hour: number   // 9 | 12 | 17
   min_quota: number
   max_quota: number
   status: 'pending' | 'drawn'
@@ -21,7 +22,8 @@ export interface LuckyBagEntry {
 }
 
 export interface LuckyBagStatusResponse {
-  activity: LuckyBagActivity
+  today_activities: LuckyBagActivity[]
+  next_activity: LuckyBagActivity | null
   entered: boolean
   weight: number
   participant_count: number

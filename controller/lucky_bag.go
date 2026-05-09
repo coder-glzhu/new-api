@@ -8,23 +8,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// LuckyBagStatus 返回今日活动状态、用户是否报名、用户权重预览
+// LuckyBagStatus 返回今日三场活动、下一场状态、用户是否报名、权重预览
 func LuckyBagStatus(c *gin.Context) {
 	userId := c.GetInt("id")
 
-	activity, err := model.GetOrCreateTodayActivity()
+	todayActivities, err := model.GetTodayActivities()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	entry, err := model.GetUserTodayEntry(userId)
+	entry, nextActivity, err := model.GetUserNextEntry(userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-
-	participantCount, _ := model.GetLuckyBagParticipantCount(activity.Id)
 
 	entered := entry != nil
 	var weight int
@@ -32,15 +30,21 @@ func LuckyBagStatus(c *gin.Context) {
 		weight = entry.Weight
 	}
 
+	var participantCount int64
+	if nextActivity != nil {
+		participantCount, _ = model.GetLuckyBagParticipantCount(nextActivity.Id)
+	}
+
 	common.ApiSuccess(c, gin.H{
-		"activity":          activity,
+		"today_activities":  todayActivities,
+		"next_activity":     nextActivity,
 		"entered":           entered,
 		"weight":            weight,
 		"participant_count": participantCount,
 	})
 }
 
-// EnterLuckyBag 用户报名今日活动
+// EnterLuckyBag 用户报名下一场活动
 func EnterLuckyBag(c *gin.Context) {
 	userId := c.GetInt("id")
 	entry, err := model.EnterLuckyBag(userId)
@@ -48,9 +52,7 @@ func EnterLuckyBag(c *gin.Context) {
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
-	common.ApiSuccess(c, gin.H{
-		"entry": entry,
-	})
+	common.ApiSuccess(c, gin.H{"entry": entry})
 }
 
 // LuckyBagHistory 获取历史开奖记录（分页）
@@ -76,54 +78,48 @@ func LuckyBagHistory(c *gin.Context) {
 
 // AdminGetLuckyBagConfig 管理员查看今日活动配置
 func AdminGetLuckyBagConfig(c *gin.Context) {
-	activity, err := model.GetOrCreateTodayActivity()
+	todayActivities, err := model.GetTodayActivities()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	participantCount, _ := model.GetLuckyBagParticipantCount(activity.Id)
-	common.ApiSuccess(c, gin.H{
-		"activity":          activity,
-		"participant_count": participantCount,
-	})
+	common.ApiSuccess(c, gin.H{"today_activities": todayActivities})
 }
 
 type AdminUpdateLuckyBagRequest struct {
-	MinQuota int `json:"min_quota"`
-	MaxQuota int `json:"max_quota"`
+	ActivityId int `json:"activity_id"`
+	MinQuota   int `json:"min_quota"`
+	MaxQuota   int `json:"max_quota"`
 }
 
-// AdminUpdateLuckyBagConfig 管理员更新今日奖品区间
+// AdminUpdateLuckyBagConfig 管理员更新指定场次奖品区间
 func AdminUpdateLuckyBagConfig(c *gin.Context) {
 	var req AdminUpdateLuckyBagRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || req.ActivityId <= 0 {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
-	activity, err := model.GetOrCreateTodayActivity()
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if err := model.UpdateLuckyBagActivityConfig(activity.Id, req.MinQuota, req.MaxQuota); err != nil {
+	if err := model.UpdateLuckyBagActivityConfig(req.ActivityId, req.MinQuota, req.MaxQuota); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, nil)
 }
 
-// AdminDrawLuckyBag 管理员手动触发今日开奖
+type AdminDrawRequest struct {
+	ActivityId int `json:"activity_id"`
+}
+
+// AdminDrawLuckyBag 管理员手动触发指定场次开奖
 func AdminDrawLuckyBag(c *gin.Context) {
-	activity, err := model.GetOrCreateTodayActivity()
-	if err != nil {
-		common.ApiError(c, err)
+	var req AdminDrawRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.ActivityId <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
-	if err := model.DrawLuckyBag(activity.Id); err != nil {
+	if err := model.DrawLuckyBag(req.ActivityId); err != nil {
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
-	// 重新读取更新后的 activity
-	updated, _ := model.GetOrCreateTodayActivity()
-	common.ApiSuccess(c, updated)
+	common.ApiSuccess(c, nil)
 }

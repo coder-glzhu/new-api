@@ -19,13 +19,18 @@ import {
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { SectionPageLayout } from '@/components/layout'
 import { getLuckyBagStatus, enterLuckyBag, getLuckyBagHistory } from './api'
-import { useNoonCountdown } from './hooks'
+import { useNextDrawCountdown } from './hooks'
 import type { LuckyBagActivity, LuckyBagStatusResponse } from './types'
+
+const DRAW_SLOTS = [
+  { hour: 9, label: '09:00' },
+  { hour: 12, label: '12:00' },
+  { hour: 17, label: '17:00' },
+]
 
 function pad(n: number) {
   return n.toString().padStart(2, '0')
@@ -35,33 +40,107 @@ function pad(n: number) {
 function CountdownBlock({ value, label }: { value: number; label: string }) {
   return (
     <div className='flex flex-col items-center gap-1'>
-      <div className='bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 min-w-[3rem] text-center'>
+      <div className='min-w-[3rem] rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-center backdrop-blur-sm'>
         <span className='text-2xl font-bold tabular-nums text-white leading-none'>
           {pad(value)}
         </span>
       </div>
-      <span className='text-white/60 text-xs font-medium'>{label}</span>
+      <span className='text-xs font-medium text-white/60'>{label}</span>
+    </div>
+  )
+}
+
+// ─── Today Slots Timeline ─────────────────────────────────────────────────────
+function TodaySlotsTimeline({
+  activities,
+  nextHour,
+}: {
+  activities: LuckyBagActivity[]
+  nextHour: number
+}) {
+  const { t } = useTranslation()
+  const activityMap = new Map(activities.map((a) => [a.slot_hour, a]))
+
+  return (
+    <div className='flex items-stretch gap-0'>
+      {DRAW_SLOTS.map((slot, idx) => {
+        const activity = activityMap.get(slot.hour)
+        const isDrawn = activity?.status === 'drawn'
+        const isNext = slot.hour === nextHour
+        const isPast = !isNext && !isDrawn && (() => {
+          const now = new Date()
+          return now.getHours() >= slot.hour
+        })()
+
+        return (
+          <div key={slot.hour} className='flex flex-1 flex-col items-center gap-2'>
+            {/* Connector line */}
+            <div className='flex w-full items-center'>
+              <div className={cn('h-px flex-1', idx === 0 ? 'bg-transparent' : isDrawn ? 'bg-yellow-400/50' : 'bg-white/20')} />
+              <div className={cn(
+                'flex size-8 shrink-0 items-center justify-center rounded-full border-2 transition-all',
+                isDrawn
+                  ? 'border-yellow-400 bg-yellow-400/20 text-yellow-300'
+                  : isNext
+                    ? 'border-white bg-white/20 text-white shadow-lg shadow-white/20 animate-pulse'
+                    : isPast
+                      ? 'border-white/30 bg-white/5 text-white/40'
+                      : 'border-white/30 bg-white/5 text-white/40'
+              )}>
+                {isDrawn ? (
+                  <Trophy className='size-3.5' />
+                ) : isNext ? (
+                  <Zap className='size-3.5' />
+                ) : (
+                  <Gift className='size-3.5' />
+                )}
+              </div>
+              <div className={cn('h-px flex-1', idx === DRAW_SLOTS.length - 1 ? 'bg-transparent' : isDrawn ? 'bg-yellow-400/50' : 'bg-white/20')} />
+            </div>
+
+            {/* Label + status */}
+            <div className='text-center'>
+              <p className={cn('text-xs font-bold', isDrawn ? 'text-yellow-300' : isNext ? 'text-white' : 'text-white/50')}>
+                {slot.label}
+              </p>
+              {isDrawn && activity?.winner_name ? (
+                <p className='mt-0.5 text-[10px] text-yellow-300/80 truncate max-w-[5rem]'>
+                  {activity.winner_name}
+                </p>
+              ) : isNext ? (
+                <p className='mt-0.5 text-[10px] text-white/70'>{t('Next')}</p>
+              ) : isPast ? (
+                <p className='mt-0.5 text-[10px] text-white/40'>{t('No entries')}</p>
+              ) : (
+                <p className='mt-0.5 text-[10px] text-white/40'>{t('Upcoming')}</p>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
 // ─── Hero Banner ──────────────────────────────────────────────────────────────
 function HeroBanner({
-  status,
+  statusData,
   entered,
   participantCount,
   onEnter,
   entering,
 }: {
-  status: LuckyBagStatusResponse | null
+  statusData: LuckyBagStatusResponse | null
   entered: boolean
   participantCount: number
   onEnter: () => void
   entering: boolean
 }) {
   const { t } = useTranslation()
-  const { h, m, s } = useNoonCountdown()
-  const isDrawn = status?.activity?.status === 'drawn'
+  const { hour: nextHour, h, m, s } = useNextDrawCountdown()
+  const nextActivity = statusData?.next_activity
+  const isNextDrawn = nextActivity?.status === 'drawn'
+  const todayActivities = statusData?.today_activities ?? []
 
   return (
     <div className='relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-6 sm:p-8'>
@@ -69,7 +148,6 @@ function HeroBanner({
       <div className='pointer-events-none absolute inset-0 overflow-hidden'>
         <div className='absolute -right-20 -top-20 size-64 rounded-full bg-white/5 blur-3xl' />
         <div className='absolute -bottom-16 -left-16 size-48 rounded-full bg-indigo-400/10 blur-2xl' />
-        <div className='absolute left-1/2 top-1/4 size-32 rounded-full bg-violet-300/10 blur-2xl' />
         {[...Array(6)].map((_, i) => (
           <Star
             key={i}
@@ -84,96 +162,100 @@ function HeroBanner({
         ))}
       </div>
 
-      <div className='relative z-10 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between'>
-        {/* Left: title + bag animation */}
-        <div className='flex items-center gap-5'>
-          <motion.div
-            animate={{ rotate: [-4, 4, -4], y: [0, -4, 0] }}
-            transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
-            className='shrink-0'
-          >
-            <div className='relative flex size-20 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm border border-white/25 shadow-xl'>
-              <Gift className='size-10 text-white drop-shadow-lg' />
-              <motion.div
-                animate={{ scale: [1, 1.4, 1], opacity: [0.7, 0, 0.7] }}
-                transition={{ repeat: Infinity, duration: 2, delay: 0.5 }}
-                className='absolute -right-1 -top-1 size-3 rounded-full bg-yellow-300'
-              />
-            </div>
-          </motion.div>
+      <div className='relative z-10 flex flex-col gap-6'>
+        {/* Top row: bag + title + countdown + button */}
+        <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
+          <div className='flex items-center gap-4'>
+            <motion.div
+              animate={{ rotate: [-4, 4, -4], y: [0, -4, 0] }}
+              transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
+              className='shrink-0'
+            >
+              <div className='relative flex size-16 items-center justify-center rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-sm'>
+                <Gift className='size-8 text-white drop-shadow-lg' />
+                <motion.div
+                  animate={{ scale: [1, 1.4, 1], opacity: [0.7, 0, 0.7] }}
+                  transition={{ repeat: Infinity, duration: 2, delay: 0.5 }}
+                  className='absolute -right-1 -top-1 size-3 rounded-full bg-yellow-300'
+                />
+              </div>
+            </motion.div>
 
-          <div>
-            <div className='flex items-center gap-2'>
-              <Sparkles className='size-4 text-yellow-300' />
-              <h1 className='text-xl font-bold text-white sm:text-2xl'>{t('Lucky Bag')}</h1>
-            </div>
-            <p className='mt-1 text-sm text-white/70'>{t('Draw at noon daily')}</p>
-            <div className='mt-2 flex items-center gap-2'>
-              <Users className='size-3.5 text-white/60' />
-              <span className='text-xs text-white/70'>
-                {participantCount} {t('Participants')}
-              </span>
-              {status?.activity && (
-                <>
-                  <span className='text-white/30'>·</span>
-                  <span className='text-xs text-white/70'>
-                    {t('Prize')}: {formatQuota(status.activity.min_quota)}–{formatQuota(status.activity.max_quota)}
-                  </span>
-                </>
-              )}
+            <div>
+              <div className='flex items-center gap-2'>
+                <Sparkles className='size-4 text-yellow-300' />
+                <h1 className='text-xl font-bold text-white sm:text-2xl'>{t('Lucky Bag')}</h1>
+              </div>
+              <p className='mt-0.5 text-sm text-white/70'>{t('3 draws daily — 09:00 · 12:00 · 17:00')}</p>
+              <div className='mt-1.5 flex items-center gap-2'>
+                <Users className='size-3 text-white/60' />
+                <span className='text-xs text-white/70'>
+                  {participantCount} {t('Participants')}
+                </span>
+                {nextActivity && (
+                  <>
+                    <span className='text-white/30'>·</span>
+                    <span className='text-xs text-white/70'>
+                      {t('Prize')}: {formatQuota(nextActivity.min_quota)}–{formatQuota(nextActivity.max_quota)}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Right: countdown or result */}
-        <div className='flex flex-col items-start gap-3 sm:items-end'>
-          {!isDrawn ? (
-            <>
-              <p className='text-xs font-medium text-white/60 uppercase tracking-wider'>
-                {t('Next draw in')}
+          <div className='flex flex-col items-start gap-3 sm:items-end'>
+            <div>
+              <p className='text-[10px] font-medium uppercase tracking-wider text-white/60 mb-1.5 sm:text-right'>
+                {t('Next draw in')} ({pad(nextHour)}:00)
               </p>
               <div className='flex items-end gap-1.5'>
                 <CountdownBlock value={h} label={t('Hours')} />
-                <span className='mb-3 text-white/60 font-bold text-lg leading-none'>:</span>
+                <span className='mb-3 text-lg font-bold leading-none text-white/60'>:</span>
                 <CountdownBlock value={m} label={t('Minutes')} />
-                <span className='mb-3 text-white/60 font-bold text-lg leading-none'>:</span>
+                <span className='mb-3 text-lg font-bold leading-none text-white/60'>:</span>
                 <CountdownBlock value={s} label={t('Seconds')} />
               </div>
-            </>
-          ) : (
-            <div className='flex items-center gap-2 rounded-xl bg-white/15 border border-white/25 px-4 py-2.5'>
-              <Trophy className='size-4 text-yellow-300' />
-              <span className='text-sm font-medium text-white'>{t('Already drawn')}</span>
             </div>
-          )}
 
-          <motion.div whileTap={{ scale: 0.95 }}>
-            <Button
-              onClick={onEnter}
-              disabled={entered || entering || isDrawn}
-              className={cn(
-                'h-10 rounded-xl px-6 font-semibold shadow-lg transition-all',
-                entered || isDrawn
-                  ? 'bg-white/20 text-white/70 border border-white/30 hover:bg-white/20 cursor-default'
-                  : 'bg-white text-violet-700 hover:bg-white/90'
-              )}
-            >
-              {entered ? (
-                <span className='flex items-center gap-1.5'>
-                  <CheckCircle2 className='size-4' />
-                  {t("You're In!")}
-                </span>
-              ) : isDrawn ? (
-                t('Already drawn')
-              ) : (
-                <span className='flex items-center gap-1.5'>
-                  <Zap className='size-4' />
-                  {t('Enter Lucky Bag Draw')}
-                </span>
-              )}
-            </Button>
-          </motion.div>
+            <motion.div whileTap={{ scale: 0.95 }}>
+              <Button
+                onClick={onEnter}
+                disabled={entered || entering || isNextDrawn}
+                className={cn(
+                  'h-10 rounded-xl px-6 font-semibold shadow-lg transition-all',
+                  entered || isNextDrawn
+                    ? 'cursor-default border border-white/30 bg-white/20 text-white/70 hover:bg-white/20'
+                    : 'bg-white text-violet-700 hover:bg-white/90'
+                )}
+              >
+                {entered ? (
+                  <span className='flex items-center gap-1.5'>
+                    <CheckCircle2 className='size-4' />
+                    {t("You're In!")}
+                  </span>
+                ) : isNextDrawn ? (
+                  t('Already drawn')
+                ) : (
+                  <span className='flex items-center gap-1.5'>
+                    <Zap className='size-4' />
+                    {t('Enter Lucky Bag Draw')}
+                  </span>
+                )}
+              </Button>
+            </motion.div>
+          </div>
         </div>
+
+        {/* Today slots timeline */}
+        {todayActivities.length > 0 && (
+          <div className='rounded-xl border border-white/15 bg-white/5 p-4'>
+            <p className='mb-3 text-[10px] font-medium uppercase tracking-wider text-white/50'>
+              {t("Today's Schedule")}
+            </p>
+            <TodaySlotsTimeline activities={todayActivities} nextHour={nextHour} />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -229,9 +311,7 @@ function WeightBreakdownCard({ weight }: { weight: number }) {
               <item.icon className={cn('size-3.5', item.color)} />
             </div>
             <div className='min-w-0 flex-1'>
-              <div className='flex items-center justify-between'>
-                <span className='text-sm font-medium'>{item.label}</span>
-              </div>
+              <span className='text-sm font-medium'>{item.label}</span>
               <p className='text-muted-foreground mt-0.5 text-xs'>{item.desc}</p>
             </div>
           </div>
@@ -247,36 +327,36 @@ function WeightBreakdownCard({ weight }: { weight: number }) {
   )
 }
 
-// ─── Today's Winner ───────────────────────────────────────────────────────────
-function TodayWinnerCard({ activity }: { activity: LuckyBagActivity }) {
+// ─── Rules Card ───────────────────────────────────────────────────────────────
+function RulesCard() {
   const { t } = useTranslation()
+  const rules = [
+    t('3 draws per day — 09:00, 12:00, 17:00'),
+    t('Enter each draw separately before the draw time'),
+    t('One winner per draw via weighted random selection'),
+    t('Higher recharge amount = more weight'),
+    t('More API requests = more weight'),
+    t('More check-in days = more weight (up to 30)'),
+    t('Winners receive a redemption code in the draw history'),
+  ]
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className='relative overflow-hidden rounded-xl bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 border border-yellow-200/60 dark:border-yellow-800/40 p-5'
-    >
-      <div className='pointer-events-none absolute right-3 top-3 opacity-10'>
-        <Trophy className='size-16 text-yellow-500' />
+    <div className='bg-card ring-foreground/10 flex flex-col gap-4 rounded-xl p-5 ring-1'>
+      <div className='flex items-center gap-2'>
+        <Star className='text-muted-foreground size-4' />
+        <h3 className='text-sm font-semibold'>{t('Activity Rules')}</h3>
       </div>
-      <div className='relative flex items-start gap-3'>
-        <div className='flex size-9 shrink-0 items-center justify-center rounded-xl bg-yellow-400/20'>
-          <Trophy className='size-4.5 text-yellow-600 dark:text-yellow-400' />
-        </div>
-        <div className='min-w-0'>
-          <p className='text-xs font-medium uppercase tracking-wider text-yellow-700 dark:text-yellow-400'>
-            {t("Today's Winner")}
-          </p>
-          <p className='mt-0.5 text-base font-bold text-yellow-900 dark:text-yellow-100'>
-            {activity.winner_name || t('Anonymous')}
-          </p>
-          <p className='text-sm text-yellow-700/80 dark:text-yellow-300/80'>
-            {t('Won')} {formatQuota(activity.winner_quota)} quota
-          </p>
-        </div>
-      </div>
-    </motion.div>
+      <ul className='space-y-2.5'>
+        {rules.map((rule, i) => (
+          <li key={i} className='flex items-start gap-2.5 text-xs text-muted-foreground'>
+            <span className='mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-[10px] font-bold text-violet-600 dark:text-violet-400'>
+              {i + 1}
+            </span>
+            {rule}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -304,7 +384,7 @@ function HistoryCard({
         <Clock className='text-muted-foreground size-4' />
         <h3 className='text-sm font-semibold'>{t('Draw History')}</h3>
         {total > 0 && (
-          <span className='text-muted-foreground text-xs ml-auto'>{total} {t('records')}</span>
+          <span className='text-muted-foreground ml-auto text-xs'>{total} {t('records')}</span>
         )}
       </div>
 
@@ -330,25 +410,25 @@ function HistoryCard({
               className={cn(
                 'flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition-colors',
                 idx === 0 && page === 1
-                  ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 border border-yellow-200/50 dark:border-yellow-800/30'
+                  ? 'border border-yellow-200/50 bg-gradient-to-r from-yellow-50 to-amber-50 dark:border-yellow-800/30 dark:from-yellow-950/20 dark:to-amber-950/20'
                   : 'bg-muted/30 hover:bg-muted/50'
               )}
             >
-              <div className='flex items-center gap-2.5 min-w-0'>
+              <div className='flex min-w-0 items-center gap-2.5'>
                 {idx === 0 && page === 1 ? (
                   <Trophy className='size-3.5 shrink-0 text-yellow-500' />
                 ) : (
                   <Gift className='size-3.5 shrink-0 text-muted-foreground/50' />
                 )}
                 <div className='min-w-0'>
-                  <span className='font-medium truncate'>
-                    {a.winner_name || t('Anonymous')}
+                  <span className='font-medium'>{a.winner_name || t('Anonymous')}</span>
+                  <span className='text-muted-foreground ml-2 text-xs'>
+                    {a.draw_date} {pad(a.slot_hour)}:00
                   </span>
-                  <span className='text-muted-foreground ml-2 text-xs'>{a.draw_date}</span>
                 </div>
               </div>
               <span className={cn(
-                'shrink-0 text-xs font-semibold ml-2',
+                'ml-2 shrink-0 text-xs font-semibold',
                 idx === 0 && page === 1 ? 'text-yellow-700 dark:text-yellow-400' : 'text-foreground'
               )}>
                 {formatQuota(a.winner_quota)}
@@ -369,7 +449,7 @@ function HistoryCard({
           >
             {t('Prev')}
           </Button>
-          <span className='text-muted-foreground text-xs px-1'>
+          <span className='text-muted-foreground px-1 text-xs'>
             {page} / {totalPages}
           </span>
           <Button
@@ -383,38 +463,6 @@ function HistoryCard({
           </Button>
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── Rules Card ───────────────────────────────────────────────────────────────
-function RulesCard() {
-  const { t } = useTranslation()
-  const rules = [
-    t('One entry per day — register before 12:00 noon'),
-    t('One winner is selected daily via weighted random draw'),
-    t('Higher recharge amount = more weight'),
-    t('More API requests = more weight'),
-    t('More check-in days = more weight (up to 30)'),
-    t('Winners receive a redemption code in the draw history'),
-  ]
-
-  return (
-    <div className='bg-card ring-foreground/10 flex flex-col gap-4 rounded-xl p-5 ring-1'>
-      <div className='flex items-center gap-2'>
-        <Star className='text-muted-foreground size-4' />
-        <h3 className='text-sm font-semibold'>{t('Activity Rules')}</h3>
-      </div>
-      <ul className='space-y-2.5'>
-        {rules.map((rule, i) => (
-          <li key={i} className='flex items-start gap-2.5 text-xs text-muted-foreground'>
-            <span className='mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-[10px] font-bold text-violet-600 dark:text-violet-400'>
-              {i + 1}
-            </span>
-            {rule}
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }
@@ -493,9 +541,6 @@ export function LuckyBag() {
     fetchHistory(page)
   }
 
-  const todayActivity = statusData?.activity
-  const isDrawn = todayActivity?.status === 'drawn'
-
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('Lucky Bag')}</SectionPageLayout.Title>
@@ -504,9 +549,8 @@ export function LuckyBag() {
       </SectionPageLayout.Description>
       <SectionPageLayout.Content>
         <div className='mx-auto flex w-full max-w-4xl flex-col gap-5'>
-          {/* Hero banner */}
           {statusLoading ? (
-            <Skeleton className='h-52 w-full rounded-2xl' />
+            <Skeleton className='h-64 w-full rounded-2xl' />
           ) : (
             <AnimatePresence>
               <motion.div
@@ -515,7 +559,7 @@ export function LuckyBag() {
                 transition={{ duration: 0.4 }}
               >
                 <HeroBanner
-                  status={statusData}
+                  statusData={statusData}
                   entered={entered}
                   participantCount={statusData?.participant_count ?? 0}
                   onEnter={handleEnter}
@@ -525,18 +569,11 @@ export function LuckyBag() {
             </AnimatePresence>
           )}
 
-          {/* Today's winner (shown after draw) */}
-          {!statusLoading && isDrawn && todayActivity && todayActivity.winner_user_id > 0 && (
-            <TodayWinnerCard activity={todayActivity} />
-          )}
-
-          {/* Middle grid */}
           <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
             <WeightBreakdownCard weight={weight} />
             <RulesCard />
           </div>
 
-          {/* History */}
           <HistoryCard
             activities={historyActivities}
             loading={historyLoading}
