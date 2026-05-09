@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { getLuckyBagStatus, enterLuckyBag, getLuckyBagHistory, markLuckyBagViewed } from './api'
 import { useNextDrawCountdown } from './hooks'
 import type { LuckyBagActivity, LuckyBagResultCard, LuckyBagStatusResponse } from './types'
@@ -268,9 +269,9 @@ function ResultDialog({
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!card) return
-    navigator.clipboard.writeText(card.activity.winner_code)
+    await copyToClipboard(card.activity.winner_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -456,8 +457,8 @@ function RulesCard() {
 function HistoryRowCode({ a }: { a: LuckyBagActivity }) {
   const [copied, setCopied] = useState(false)
   const isUsed = a.winner_code_status === 3
-  const handleCopy = () => {
-    navigator.clipboard.writeText(a.winner_code)
+  const handleCopy = async () => {
+    await copyToClipboard(a.winner_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
