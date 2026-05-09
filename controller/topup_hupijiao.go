@@ -228,6 +228,7 @@ func createHupijiaoPayment(tradeNo string, amount float64, username string) (pay
 	}
 
 	// 解析响应
+	common.SysLog(fmt.Sprintf("虎皮椒创建订单原始响应 trade_no=%s body=%s", tradeNo, string(body)))
 	var result map[string]interface{}
 	err = common.Unmarshal(body, &result)
 	if err != nil {
