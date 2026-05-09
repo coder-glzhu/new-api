@@ -65,9 +65,7 @@ export function Wallet(props: WalletProps) {
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [billingDialogOpen, setBillingDialogOpen] = useState(false)
   const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
-  const [activeWalletTab, setActiveWalletTab] = useState<
-    'subscription' | 'recharge'
-  >('subscription')
+  const [activeTab, setActiveTab] = useState<'subscription' | 'recharge'>('subscription')
   const [redemptionCode, setRedemptionCode] = useState('')
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
@@ -80,12 +78,12 @@ export function Wallet(props: WalletProps) {
   const { currency } = useSystemConfig()
   const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
 
-  // Calculate effective exchange rate - when display type is USD, use rate of 1
   const effectiveUsdExchangeRate = useMemo(() => {
     return currency?.quotaDisplayType === 'USD'
       ? 1
       : currency?.usdExchangeRate || 1
   }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
+
   const {
     amount: paymentAmount,
     calculating,
@@ -107,7 +105,6 @@ export function Wallet(props: WalletProps) {
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
 
-  // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
     try {
       setUserLoading(true)
@@ -192,13 +189,11 @@ export function Wallet(props: WalletProps) {
     }
   }, [props.initialShowHistory])
 
-  // Initialize topup amount when topup info is loaded
   useEffect(() => {
     if (topupInfo && topupAmount === 0) {
       const minTopup = getMinTopupAmount(topupInfo)
       setTopupAmount(minTopup)
 
-      // Calculate initial payment amount with default payment type
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
       calculatePaymentAmount(minTopup, defaultPaymentType, {
         useHupijiao: shouldRouteAlipayThroughHupijiao(
@@ -209,7 +204,6 @@ export function Wallet(props: WalletProps) {
     }
   }, [topupInfo, topupAmount, calculatePaymentAmount])
 
-  // Get current payment type (selected or default)
   const getCurrentPaymentType = useCallback(() => {
     return selectedPaymentMethod?.type || getDefaultPaymentType(topupInfo)
   }, [selectedPaymentMethod, topupInfo])
@@ -222,33 +216,28 @@ export function Wallet(props: WalletProps) {
     [calculatePaymentAmount, topupInfo]
   )
 
-  // Handle preset selection
   const handleSelectPreset = (preset: PresetAmount) => {
     setTopupAmount(preset.value)
     setSelectedPreset(preset.value)
     calculateRoutedPaymentAmount(preset.value, getCurrentPaymentType())
   }
 
-  // Handle topup amount change
   const handleTopupAmountChange = (amount: number) => {
     setTopupAmount(amount)
     setSelectedPreset(null)
     calculateRoutedPaymentAmount(amount, getCurrentPaymentType())
   }
 
-  // Handle payment method selection
   const handlePaymentMethodSelect = async (method: PaymentMethod) => {
     setSelectedPaymentMethod(method)
     setPaymentLoading(method.type)
 
     try {
-      // Validate minimum topup
       const minTopup = getMinTopupAmount(topupInfo)
       if (topupAmount < minTopup) {
         return
       }
 
-      // Calculate payment amount and show confirmation dialog
       await calculateRoutedPaymentAmount(topupAmount, method.type)
       setConfirmDialogOpen(true)
     } finally {
@@ -256,7 +245,6 @@ export function Wallet(props: WalletProps) {
     }
   }
 
-  // Handle payment confirmation
   const handlePaymentConfirm = async () => {
     if (!selectedPaymentMethod) return
 
@@ -288,7 +276,6 @@ export function Wallet(props: WalletProps) {
     }
   }
 
-  // Handle redemption
   const handleRedeem = async () => {
     if (!redemptionCode) return
 
@@ -299,7 +286,6 @@ export function Wallet(props: WalletProps) {
     }
   }
 
-  // Handle transfer
   const handleTransfer = async (amount: number) => {
     const success = await transferQuota(amount)
     if (success) {
@@ -308,13 +294,11 @@ export function Wallet(props: WalletProps) {
     return success
   }
 
-  // Handle Creem product selection
   const handleCreemProductSelect = (product: CreemProduct) => {
     setSelectedCreemProduct(product)
     setCreemDialogOpen(true)
   }
 
-  // Handle Creem payment confirmation
   const handleCreemConfirm = async () => {
     if (!selectedCreemProduct) return
 
@@ -337,7 +321,6 @@ export function Wallet(props: WalletProps) {
     }
   }
 
-  // Get discount rate for current topup amount
   const getDiscountRate = useCallback(() => {
     return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
   }, [topupInfo, topupAmount])
@@ -349,12 +332,12 @@ export function Wallet(props: WalletProps) {
     []
   )
 
-  // 订阅不可用时，自动切到充值页，并保持此状态
+  // 订阅不可用时自动切到充值
   useEffect(() => {
-    if (!showSubscriptionPanel && activeWalletTab === 'subscription') {
-      setActiveWalletTab('recharge')
+    if (!showSubscriptionPanel && activeTab === 'subscription') {
+      setActiveTab('recharge')
     }
-  }, [showSubscriptionPanel, activeWalletTab])
+  }, [showSubscriptionPanel, activeTab])
 
   return (
     <>
@@ -364,11 +347,15 @@ export function Wallet(props: WalletProps) {
           {t('Manage your balance and payment methods')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
+          <div className='mx-auto flex w-full max-w-7xl flex-col gap-5'>
+            {/* Stats row */}
             <WalletStatsCard user={user} loading={userLoading} />
 
-            <div className='grid gap-4 sm:gap-5 lg:grid-cols-2'>
-              <MySubscriptionsCard />
+            {/* My Subscriptions + Affiliate — always visible at top */}
+            <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
+              <MySubscriptionsCard
+                onAvailabilityChange={handleSubscriptionAvailabilityChange}
+              />
               <AffiliateRewardsCard
                 user={user}
                 affiliateLink={affiliateLink}
@@ -377,18 +364,15 @@ export function Wallet(props: WalletProps) {
               />
             </div>
 
-            {/* 顶部切换：订阅 / 充值。订阅不可用时只显示充值。 */}
+            {/* Tab: Subscription Plans / Recharge */}
             <Tabs
-              value={activeWalletTab}
+              value={activeTab}
               onValueChange={(v) =>
-                setActiveWalletTab(
-                  (v as 'subscription' | 'recharge') || 'subscription'
-                )
+                setActiveTab((v as 'subscription' | 'recharge') || 'subscription')
               }
-              className='w-full'
             >
               {showSubscriptionPanel && (
-                <TabsList className='h-10 w-full max-w-md self-center sm:mx-auto'>
+                <TabsList className='h-10 w-full max-w-xs'>
                   <TabsTrigger value='subscription'>
                     {t('Subscription')}
                   </TabsTrigger>
@@ -396,20 +380,13 @@ export function Wallet(props: WalletProps) {
                 </TabsList>
               )}
 
-              {/* 订阅页。keepMounted 保证切到充值页时仍挂载，
-                  订阅可用性探测（用于控制 Tab 是否显示）持续有效。 */}
-              <TabsContent
-                value='subscription'
-                className='mt-4'
-                keepMounted
-              >
+              <TabsContent value='subscription' className='mt-4' keepMounted>
                 <SubscriptionPlansCard
                   topupInfo={topupInfo}
                   onAvailabilityChange={handleSubscriptionAvailabilityChange}
                 />
               </TabsContent>
 
-              {/* 充值 */}
               <TabsContent value='recharge' className='mt-4'>
                 <div id='wallet-add-funds' className='scroll-mt-4'>
                   <RechargeFormCard
@@ -446,7 +423,6 @@ export function Wallet(props: WalletProps) {
                 </div>
               </TabsContent>
             </Tabs>
-
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

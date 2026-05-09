@@ -291,6 +291,9 @@ type UserSubscription struct {
 	UpgradeGroup  string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
 	PrevUserGroup string `json:"prev_user_group" gorm:"type:varchar(64);default:''"`
 
+	// UserPriority is set by the user to control deduction order (higher = deducted first).
+	UserPriority int `json:"user_priority" gorm:"not null;default:0"`
+
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
 }
@@ -1077,7 +1080,7 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 		var subs []UserSubscription
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").
 			Where("user_id = ? AND status = ? AND end_time > ?", userId, "active", now).
-			Order("end_time asc, id asc").
+			Order("user_priority desc, end_time asc, id asc").
 			Find(&subs).Error; err != nil {
 			return errors.New("no active subscription")
 		}
@@ -1379,4 +1382,28 @@ func ExpirePendingSubscriptionOrders(expireTimestamp int64, limit int) (int, err
 	}
 
 	return int(result.RowsAffected), nil
+}
+
+// SubscriptionPriorityItem is one entry in a bulk-priority update request.
+type SubscriptionPriorityItem struct {
+	Id       int `json:"id"`
+	Priority int `json:"priority"`
+}
+
+// UpdateUserSubscriptionPriorities atomically sets user_priority for a list of
+// subscriptions that belong to the given user. Only active subscriptions are updated.
+func UpdateUserSubscriptionPriorities(userId int, items []SubscriptionPriorityItem) error {
+	if userId <= 0 || len(items) == 0 {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		for _, item := range items {
+			if err := tx.Model(&UserSubscription{}).
+				Where("id = ? AND user_id = ? AND status = ?", item.Id, userId, "active").
+				Update("user_priority", item.Priority).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

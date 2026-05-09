@@ -155,6 +155,13 @@ export async function updateBillingPreference(
   return res.data
 }
 
+export async function updateSubscriptionPriorities(
+  items: { id: number; priority: number }[]
+): Promise<ApiResponse<null>> {
+  const res = await api.put('/api/subscription/self/priority', { items })
+  return res.data
+}
+
 export async function getGroups(): Promise<ApiResponse<string[]>> {
   const res = await api.get('/api/group')
   return res.data

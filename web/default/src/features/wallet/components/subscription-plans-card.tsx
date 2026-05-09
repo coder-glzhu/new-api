@@ -13,10 +13,8 @@ import { formatCnyCurrencyAmount } from '@/lib/currency'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { TitledCard } from '@/components/ui/titled-card'
 import {
   Tooltip,
   TooltipContent,
@@ -101,14 +99,13 @@ function SoldCountChip({ count }: { count: number }) {
   )
 }
 
-// 单个按钮组件，内部用 useCountdown 驱动全部状态切换，无需父组件重渲染
 function PlanActionButton({
   startsAt,
   expiresAt,
   onClick,
 }: {
-  startsAt: number // 0 = 无限制
-  expiresAt: number // 0 = 无限制
+  startsAt: number
+  expiresAt: number
   onClick: () => void
 }) {
   const { t } = useTranslation()
@@ -243,18 +240,17 @@ export function SubscriptionPlansCard({
 
   if (loading) {
     return (
-      <Card className='gap-0 overflow-hidden py-0'>
-        <CardHeader className='border-b p-3 !pb-3 sm:p-5 sm:!pb-5'>
-          <Skeleton className='h-6 w-32' />
-        </CardHeader>
-        <CardContent className='p-3 sm:p-5'>
-          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className='h-48 w-full' />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className='bg-card ring-foreground/10 rounded-xl p-5 ring-1'>
+        <div className='mb-5 flex items-center gap-3'>
+          <Skeleton className='size-8 rounded-lg' />
+          <Skeleton className='h-5 w-32' />
+        </div>
+        <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className='h-52 w-full rounded-xl' />
+          ))}
+        </div>
+      </div>
     )
   }
 
@@ -262,143 +258,147 @@ export function SubscriptionPlansCard({
 
   return (
     <>
-      <TitledCard
-        title={t('Subscription Plans')}
-        description={t('Purchase a plan to enjoy model benefits')}
-        icon={<Crown className='h-4 w-4' />}
-        contentClassName='flex flex-col gap-4 sm:gap-5'
-      >
-        {/* Available plans grid */}
-        {plans.length > 0 ? (
-          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 2xl:gap-4'>
-            {plans.map((p, index) => {
-              const plan = p?.plan
-              if (!plan) return null
-              const totalAmount = Number(plan.total_amount || 0)
-              const priceCNY = Number(plan.price_cny || 0)
-              const price = Number(plan.price_amount || 0).toFixed(2)
-              const displayPrice =
-                enableHupijiao && priceCNY > 0
-                  ? formatCnyCurrencyAmount(priceCNY, {
-                      digitsLarge: 2,
-                      digitsSmall: 2,
-                      abbreviate: false,
-                    })
-                  : `$${price}`
-              const isPopular = index === 0 && plans.length > 1
-              const limit = Number(plan.max_purchase_per_user || 0)
-              const count = planPurchaseCountMap.get(plan.id) || 0
-              const reached = limit > 0 && count >= limit
+      <div className='bg-card ring-foreground/10 flex flex-col gap-5 rounded-xl p-5 ring-1'>
+        {/* Section header */}
+        <div className='flex items-center gap-3'>
+          <div className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
+            <Crown className='text-muted-foreground size-4' />
+          </div>
+          <div>
+            <h3 className='text-sm font-semibold'>{t('Subscription Plans')}</h3>
+            <p className='text-muted-foreground mt-0.5 text-xs'>
+              {t('Purchase a plan to enjoy model benefits')}
+            </p>
+          </div>
+        </div>
 
-              const startsAt = Number(plan.starts_at || 0)
-              const expiresAt = Number(plan.expires_at || 0)
-              const soldCount = Number(p.sold_count || 0)
+        {/* Plans grid */}
+        <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 2xl:gap-4'>
+          {plans.map((p, index) => {
+            const plan = p?.plan
+            if (!plan) return null
+            const totalAmount = Number(plan.total_amount || 0)
+            const priceCNY = Number(plan.price_cny || 0)
+            const price = Number(plan.price_amount || 0).toFixed(2)
+            const displayPrice =
+              enableHupijiao && priceCNY > 0
+                ? formatCnyCurrencyAmount(priceCNY, {
+                    digitsLarge: 2,
+                    digitsSmall: 2,
+                    abbreviate: false,
+                  })
+                : `$${price}`
+            const isPopular = index === 0 && plans.length > 1
+            const limit = Number(plan.max_purchase_per_user || 0)
+            const count = planPurchaseCountMap.get(plan.id) || 0
+            const reached = limit > 0 && count >= limit
 
-              const benefits = [
-                `${t('Validity Period')}: ${formatDuration(plan, t)}`,
-                formatResetPeriod(plan, t) !== t('No Reset')
-                  ? `${t('Quota Reset')}: ${formatResetPeriod(plan, t)}`
-                  : null,
-                totalAmount > 0
-                  ? `${t('Total Quota')}: ${formatQuota(totalAmount)}`
-                  : `${t('Total Quota')}: ${t('Unlimited')}`,
-                limit > 0 ? `${t('Purchase Limit')}: ${limit}` : null,
-                plan.upgrade_group
-                  ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
-                  : null,
-              ].filter(Boolean) as string[]
+            const startsAt = Number(plan.starts_at || 0)
+            const expiresAt = Number(plan.expires_at || 0)
+            const soldCount = Number(p.sold_count || 0)
 
-              return (
-                <Card
-                  key={plan.id}
-                  className={cn(
-                    'transition-shadow hover:shadow-md',
-                    isPopular && 'border-primary/70 shadow-sm'
-                  )}
-                >
-                  <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
-                    <div className='mb-2 space-y-1'>
-                      <div className='flex items-center justify-between gap-3'>
-                        <h4 className='min-w-0 truncate font-semibold'>
-                          {plan.title || t('Subscription Plans')}
-                        </h4>
-                        <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1'>
-                          <SaleWindowBadge
-                            startsAt={startsAt}
-                            expiresAt={expiresAt}
-                          />
-                          {isPopular && (
-                            <StatusBadge
-                              variant='info'
-                              copyable={false}
-                              className='shrink-0'
-                            >
-                              <Sparkles className='h-3 w-3' />
-                              {t('Recommended')}
-                            </StatusBadge>
-                          )}
-                        </div>
-                      </div>
-                      {plan.subtitle && (
-                        <p className='text-muted-foreground truncate text-xs'>
-                          {plan.subtitle}
-                        </p>
-                      )}
-                    </div>
+            const benefits = [
+              `${t('Validity Period')}: ${formatDuration(plan, t)}`,
+              formatResetPeriod(plan, t) !== t('No Reset')
+                ? `${t('Quota Reset')}: ${formatResetPeriod(plan, t)}`
+                : null,
+              totalAmount > 0
+                ? `${t('Total Quota')}: ${formatQuota(totalAmount)}`
+                : `${t('Total Quota')}: ${t('Unlimited')}`,
+              limit > 0 ? `${t('Purchase Limit')}: ${limit}` : null,
+              plan.upgrade_group
+                ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
+                : null,
+            ].filter(Boolean) as string[]
 
-                    <div className='flex items-end justify-between gap-2 py-2'>
-                      <span className='text-primary text-2xl font-bold tracking-tight'>
-                        {displayPrice}
-                      </span>
-                      <SoldCountChip count={soldCount} />
-                    </div>
-
-                    <div className='flex-1 space-y-1.5 pb-3'>
-                      {benefits.map((label) => (
-                        <div
-                          key={label}
-                          className='text-muted-foreground flex items-center gap-2 text-xs'
-                        >
-                          <Check className='text-primary h-3 w-3 shrink-0' />
-                          <span>{label}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <Separator className='mb-3' />
-
-                    {reached ? (
-                      <Tooltip>
-                        <TooltipTrigger render={<div />}>
-                          <Button variant='outline' className='w-full' disabled>
-                            {t('Limit Reached')}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {t('Purchase limit reached')} ({count}/{limit})
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <PlanActionButton
+            return (
+              <div
+                key={plan.id}
+                className={cn(
+                  'flex flex-col rounded-xl border p-4 transition-shadow hover:shadow-sm',
+                  isPopular && 'border-primary/50'
+                )}
+              >
+                {/* Plan header */}
+                <div className='mb-3 space-y-1'>
+                  <div className='flex items-start justify-between gap-2'>
+                    <h4 className='min-w-0 truncate text-sm font-semibold'>
+                      {plan.title || t('Subscription Plans')}
+                    </h4>
+                    <div className='flex shrink-0 flex-wrap items-center justify-end gap-1.5'>
+                      <SaleWindowBadge
                         startsAt={startsAt}
                         expiresAt={expiresAt}
-                        onClick={() => {
-                          setSelectedPlan(p)
-                          setPurchaseOpen(true)
-                        }}
                       />
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        ) : (
-          <p className='text-muted-foreground py-4 text-center text-sm'>
-            {t('No plans available')}
-          </p>
-        )}
-      </TitledCard>
+                      {isPopular && (
+                        <StatusBadge
+                          variant='info'
+                          copyable={false}
+                          className='shrink-0'
+                        >
+                          <Sparkles className='h-3 w-3' />
+                          {t('Recommended')}
+                        </StatusBadge>
+                      )}
+                    </div>
+                  </div>
+                  {plan.subtitle && (
+                    <p className='text-muted-foreground truncate text-xs'>
+                      {plan.subtitle}
+                    </p>
+                  )}
+                </div>
+
+                {/* Price */}
+                <div className='flex items-end justify-between gap-2 py-2'>
+                  <span className='text-primary text-2xl font-bold tracking-tight'>
+                    {displayPrice}
+                  </span>
+                  <SoldCountChip count={soldCount} />
+                </div>
+
+                {/* Benefits */}
+                <div className='flex-1 space-y-1.5 py-2'>
+                  {benefits.map((label) => (
+                    <div
+                      key={label}
+                      className='text-muted-foreground flex items-start gap-2 text-xs'
+                    >
+                      <Check className='text-primary mt-0.5 h-3 w-3 shrink-0' />
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator className='my-3' />
+
+                {/* CTA */}
+                {reached ? (
+                  <Tooltip>
+                    <TooltipTrigger render={<div />}>
+                      <Button variant='outline' className='w-full' disabled>
+                        {t('Limit Reached')}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {t('Purchase limit reached')} ({count}/{limit})
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <PlanActionButton
+                    startsAt={startsAt}
+                    expiresAt={expiresAt}
+                    onClick={() => {
+                      setSelectedPlan(p)
+                      setPurchaseOpen(true)
+                    }}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
       <SubscriptionPurchaseDialog
         open={purchaseOpen}

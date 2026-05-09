@@ -86,6 +86,24 @@ type BillingPreferenceRequest struct {
 	BillingPreference string `json:"billing_preference"`
 }
 
+type SubscriptionPriorityRequest struct {
+	Items []model.SubscriptionPriorityItem `json:"items"`
+}
+
+func UpdateSubscriptionPriority(c *gin.Context) {
+	userId := c.GetInt("id")
+	var req SubscriptionPriorityRequest
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Items) == 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.UpdateUserSubscriptionPriorities(userId, req.Items); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
 // ---- User APIs ----
 
 func GetSubscriptionPlans(c *gin.Context) {
