@@ -68,7 +68,7 @@ func SendWechatDrawResult(winnerName string, quota int, drawDate string, slotHou
 	quotaDisplay := fmt.Sprintf("%.2f", float64(quota)/500000.0)
 	msg := resultContent
 	if msg == "" {
-		msg = "🎉 福袋开奖结果：{date} {hour}:00 场次，恭喜 {winner} 获得价值 {quota} 元的额度！"
+		msg = "🎉 福袋开奖结果：{date} {hour}:00 场次，恭喜 {winner} 获得价值 {quota} 元的额度！请及时登录平台核销兑换码。"
 	}
 	msg = strings.NewReplacer(
 		"{winner}", winnerName,

@@ -3,6 +3,7 @@ import {
   Box,
   CreditCard,
   Layout,
+  Link,
   Settings,
   Shield,
   ShieldAlert,
@@ -15,6 +16,7 @@ import { getModelsSectionNavItems } from '@/features/system-settings/models/sect
 import { getOperationsSectionNavItems } from '@/features/system-settings/operations/section-registry.tsx'
 import { getSecuritySectionNavItems } from '@/features/system-settings/security/section-registry.tsx'
 import { getSiteSectionNavItems } from '@/features/system-settings/site/section-registry.tsx'
+import { getCustomIntegrationsSectionNavItems } from '@/features/custom-integrations/section-registry.tsx'
 import { type NavGroup } from '../types'
 
 /**
@@ -63,6 +65,11 @@ export function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
           title: t('Operations'),
           icon: Wrench,
           items: getOperationsSectionNavItems(t),
+        },
+        {
+          title: t('Integrations'),
+          icon: Link,
+          items: getCustomIntegrationsSectionNavItems(t),
         },
       ],
     },
