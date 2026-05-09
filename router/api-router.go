@@ -188,6 +188,7 @@ func SetApiRouter(router *gin.Engine) {
 			luckyBagRoute.GET("/status", controller.LuckyBagStatus)
 			luckyBagRoute.POST("/enter", controller.EnterLuckyBag)
 			luckyBagRoute.GET("/history", controller.LuckyBagHistory)
+			luckyBagRoute.POST("/viewed", controller.MarkLuckyBagViewed)
 		}
 		luckyBagAdminRoute := apiRouter.Group("/admin/lucky-bag")
 		luckyBagAdminRoute.Use(middleware.AdminAuth())
@@ -195,6 +196,7 @@ func SetApiRouter(router *gin.Engine) {
 			luckyBagAdminRoute.GET("", controller.AdminGetLuckyBagConfig)
 			luckyBagAdminRoute.PUT("", controller.AdminUpdateLuckyBagConfig)
 			luckyBagAdminRoute.POST("/draw", controller.AdminDrawLuckyBag)
+			luckyBagAdminRoute.POST("/notify-test", controller.AdminSendWechatTest)
 		}
 
 		// Subscription payment callbacks (no auth)

@@ -192,6 +192,13 @@ func InitOptionMap() {
 		common.OptionMap[k] = v
 	}
 
+	// 微信群通知配置
+	common.OptionMap["WechatBotEnabled"] = "false"
+	common.OptionMap["WechatBotUserId"] = ""
+	common.OptionMap["WechatBotGroupIds"] = ""
+	common.OptionMap["WechatBotReminderContent"] = ""
+	common.OptionMap["WechatBotResultContent"] = ""
+
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
 }

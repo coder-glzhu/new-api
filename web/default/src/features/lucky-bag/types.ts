@@ -11,6 +11,8 @@ export interface LuckyBagActivity {
   winner_code: string
   drawn_at: number
   created_at: number
+  // 仅历史记录中当前用户中奖时有值：1=未使用 3=已使用 0=非本人中奖
+  winner_code_status?: number
 }
 
 export interface LuckyBagEntry {
@@ -21,12 +23,19 @@ export interface LuckyBagEntry {
   created_at: number
 }
 
+export interface LuckyBagResultCard {
+  activity: LuckyBagActivity
+  is_winner: boolean
+  winner_viewed: boolean
+}
+
 export interface LuckyBagStatusResponse {
   today_activities: LuckyBagActivity[]
   next_activity: LuckyBagActivity | null
   entered: boolean
   weight: number
   participant_count: number
+  result_cards: LuckyBagResultCard[] | null
 }
 
 export interface LuckyBagHistoryResponse {

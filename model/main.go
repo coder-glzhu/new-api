@@ -247,6 +247,26 @@ func InitLogDB() (err error) {
 	return err
 }
 
+// dropLuckyBagStaleIndex removes the old single-column unique index on draw_date
+// that was created before slot_hour was added. Safe to call if the index doesn't exist.
+func dropLuckyBagStaleIndex() {
+	if common.UsingPostgreSQL {
+		DB.Exec(`DROP INDEX IF EXISTS idx_lucky_bag_activities_draw_date`)
+	} else if common.UsingMySQL {
+		// MySQL: check information_schema first to avoid error on missing index
+		var count int64
+		DB.Raw(`SELECT COUNT(*) FROM information_schema.statistics
+			WHERE table_schema = DATABASE()
+			AND table_name = 'lucky_bag_activities'
+			AND index_name = 'idx_lucky_bag_activities_draw_date'`).Scan(&count)
+		if count > 0 {
+			DB.Exec(`ALTER TABLE lucky_bag_activities DROP INDEX idx_lucky_bag_activities_draw_date`)
+		}
+	}
+	// SQLite doesn't support DROP INDEX in a way that can conflict here;
+	// its unique index names are scoped per-table and GORM handles them correctly.
+}
+
 func migrateDB() error {
 	// Migrate price_amount column from float/double to decimal for existing tables
 	migrateSubscriptionPlanPriceAmount()
@@ -254,6 +274,9 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	// Drop stale single-column unique index on lucky_bag_activities.draw_date
+	// so GORM can create the correct composite (draw_date, slot_hour) index.
+	dropLuckyBagStaleIndex()
 
 	err := DB.AutoMigrate(
 		&Channel{},

@@ -11,20 +11,19 @@ import {
   Star,
   Clock,
   CheckCircle2,
-  TrendingUp,
-  CreditCard,
-  MessageSquare,
-  Calendar,
+  Copy,
+  Check,
+  HeartCrack,
+  X,
 } from 'lucide-react'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Separator } from '@/components/ui/separator'
 import { SectionPageLayout } from '@/components/layout'
-import { getLuckyBagStatus, enterLuckyBag, getLuckyBagHistory } from './api'
+import { getLuckyBagStatus, enterLuckyBag, getLuckyBagHistory, markLuckyBagViewed } from './api'
 import { useNextDrawCountdown } from './hooks'
-import type { LuckyBagActivity, LuckyBagStatusResponse } from './types'
+import type { LuckyBagActivity, LuckyBagResultCard, LuckyBagStatusResponse } from './types'
 
 const DRAW_SLOTS = [
   { hour: 9, label: '09:00' },
@@ -129,15 +128,17 @@ function HeroBanner({
   participantCount,
   onEnter,
   entering,
+  onDrawTime,
 }: {
   statusData: LuckyBagStatusResponse | null
   entered: boolean
   participantCount: number
   onEnter: () => void
   entering: boolean
+  onDrawTime: () => void
 }) {
   const { t } = useTranslation()
-  const { hour: nextHour, h, m, s } = useNextDrawCountdown()
+  const { hour: nextHour, h, m, s } = useNextDrawCountdown(onDrawTime)
   const nextActivity = statusData?.next_activity
   const isNextDrawn = nextActivity?.status === 'drawn'
   const todayActivities = statusData?.today_activities ?? []
@@ -261,69 +262,171 @@ function HeroBanner({
   )
 }
 
-// ─── Weight Breakdown ─────────────────────────────────────────────────────────
-function WeightBreakdownCard({ weight }: { weight: number }) {
-  const { t } = useTranslation()
 
-  const items = [
-    {
-      icon: CreditCard,
-      label: t('From recharge'),
-      desc: t('Every 500k quota = +1'),
-      color: 'text-blue-500',
-      bg: 'bg-blue-500/10',
-    },
-    {
-      icon: MessageSquare,
-      label: t('From requests'),
-      desc: t('Every 100 requests = +1'),
-      color: 'text-green-500',
-      bg: 'bg-green-500/10',
-    },
-    {
-      icon: Calendar,
-      label: t('From check-ins'),
-      desc: t('Up to 30 days = +30'),
-      color: 'text-orange-500',
-      bg: 'bg-orange-500/10',
-    },
+// ─── Result Dialog（中奖/未中奖 弹窗）────────────────────────────────────────
+function ResultDialog({
+  card,
+  open,
+  onClose,
+}: {
+  card: LuckyBagResultCard | null
+  open: boolean
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    if (!card) return
+    navigator.clipboard.writeText(card.activity.winner_code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const particles = [
+    { x: '8%',  y: '18%', size: 6, color: '#fbbf24', delay: 0 },
+    { x: '90%', y: '12%', size: 8, color: '#f59e0b', delay: 0.15 },
+    { x: '15%', y: '75%', size: 5, color: '#fcd34d', delay: 0.3 },
+    { x: '82%', y: '70%', size: 7, color: '#fbbf24', delay: 0.1 },
+    { x: '50%', y: '6%',  size: 5, color: '#fde68a', delay: 0.4 },
+    { x: '30%', y: '88%', size: 6, color: '#f59e0b', delay: 0.25 },
+    { x: '70%', y: '85%', size: 4, color: '#fcd34d', delay: 0.35 },
   ]
 
   return (
-    <div className='bg-card ring-foreground/10 flex flex-col gap-4 rounded-xl p-5 ring-1'>
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>
-          <TrendingUp className='text-muted-foreground size-4' />
-          <h3 className='text-sm font-semibold'>{t('Weight Breakdown')}</h3>
-        </div>
-        <div className='flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1'>
-          <Sparkles className='size-3 text-violet-500' />
-          <span className='text-xs font-semibold text-violet-600 dark:text-violet-400'>
-            {t('Weight')}: {weight}
-          </span>
-        </div>
-      </div>
+    <AnimatePresence>
+      {open && card && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key='backdrop'
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className='fixed inset-0 z-50 bg-black/60 backdrop-blur-sm'
+            onClick={onClose}
+          />
 
-      <div className='space-y-3'>
-        {items.map((item) => (
-          <div key={item.label} className='flex items-start gap-3'>
-            <div className={cn('mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg', item.bg)}>
-              <item.icon className={cn('size-3.5', item.color)} />
-            </div>
-            <div className='min-w-0 flex-1'>
-              <span className='text-sm font-medium'>{item.label}</span>
-              <p className='text-muted-foreground mt-0.5 text-xs'>{item.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+          {/* Dialog */}
+          <motion.div
+            key='dialog'
+            initial={{ opacity: 0, scale: 0.88, y: 24 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 16 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className='fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-4'
+          >
+            {card.is_winner ? (
+              /* ── 中奖 ── */
+              <div
+                className='relative overflow-hidden rounded-2xl shadow-2xl'
+                style={{ background: 'linear-gradient(135deg, #78350f 0%, #92400e 30%, #b45309 60%, #d97706 100%)' }}
+              >
+                {/* Shimmer */}
+                <motion.div
+                  className='pointer-events-none absolute inset-0'
+                  style={{ background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%)' }}
+                  animate={{ x: ['-100%', '200%'] }}
+                  transition={{ repeat: Infinity, duration: 3.5, ease: 'linear', repeatDelay: 2 }}
+                />
+                {/* Particles */}
+                {particles.map((p, i) => (
+                  <motion.div
+                    key={i}
+                    className='pointer-events-none absolute rounded-full'
+                    style={{ left: p.x, top: p.y, width: p.size, height: p.size, backgroundColor: p.color }}
+                    animate={{ y: [0, -10, 0], opacity: [0.6, 1, 0.6] }}
+                    transition={{ repeat: Infinity, duration: 2.4 + i * 0.2, delay: p.delay, ease: 'easeInOut' }}
+                  />
+                ))}
+                {/* Close */}
+                <button onClick={onClose} className='absolute right-3 top-3 z-20 flex size-7 items-center justify-center rounded-full bg-black/20 text-white/70 transition-colors hover:bg-black/40 hover:text-white cursor-pointer'>
+                  <X className='size-3.5' />
+                </button>
 
-      <Separator />
-      <div className='flex items-center justify-between text-xs'>
-        <span className='text-muted-foreground'>{t('Your current weight')}</span>
-        <span className='font-semibold'>{weight} pt</span>
-      </div>
-    </div>
+                <div className='relative z-10 flex flex-col gap-4 p-6'>
+                  {/* Trophy + title */}
+                  <div className='flex flex-col items-center gap-2 pt-2'>
+                    <motion.div
+                      animate={{ rotate: [-8, 8, -8], scale: [1, 1.12, 1] }}
+                      transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
+                      className='flex size-14 items-center justify-center rounded-2xl border border-yellow-300/30 bg-yellow-400/20'
+                    >
+                      <Trophy className='size-7 text-yellow-200' />
+                    </motion.div>
+                    <div className='text-center'>
+                      <div className='flex items-center justify-center gap-1.5'>
+                        <Sparkles className='size-4 text-yellow-300' />
+                        <span className='text-xl font-bold text-white'>恭喜中奖！</span>
+                        <Sparkles className='size-4 text-yellow-300' />
+                      </div>
+                      <p className='mt-0.5 text-sm text-yellow-200/70'>
+                        {card.activity.draw_date} · {pad(card.activity.slot_hour)}:00 场次
+                      </p>
+                    </div>
+                    <div className='rounded-xl border border-yellow-400/30 bg-black/20 px-5 py-2 text-center'>
+                      <p className='text-xs font-medium text-yellow-300/70'>奖励金额</p>
+                      <p className='text-3xl font-bold tabular-nums text-white'>{formatQuota(card.activity.winner_quota)}</p>
+                    </div>
+                  </div>
+
+                  {/* Code */}
+                  <div className='h-px bg-yellow-400/20' />
+                  <div>
+                    <p className='mb-2 text-xs font-semibold uppercase tracking-wider text-yellow-300/70'>兑换码</p>
+                    <div className='flex items-center gap-2 rounded-xl border border-yellow-400/30 bg-black/25 p-1 pl-4'>
+                      <span className='flex-1 font-mono text-sm font-bold tracking-widest text-yellow-100 select-all'>
+                        {card.activity.winner_code}
+                      </span>
+                      <motion.button
+                        whileTap={{ scale: 0.93 }}
+                        onClick={handleCopy}
+                        className='flex shrink-0 items-center gap-1 rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-amber-900 transition-colors hover:bg-yellow-300 cursor-pointer'
+                      >
+                        <AnimatePresence mode='wait'>
+                          {copied
+                            ? <motion.span key='d' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='flex items-center gap-1'><Check className='size-3' />已复制</motion.span>
+                            : <motion.span key='c' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='flex items-center gap-1'><Copy className='size-3' />复制</motion.span>
+                          }
+                        </AnimatePresence>
+                      </motion.button>
+                    </div>
+                    <p className='mt-2 text-xs text-yellow-300/60'>前往「钱包」→ 兑换码，输入上方兑换码即可到账</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* ── 未中奖 ── */
+              <div className='bg-card ring-foreground/10 relative overflow-hidden rounded-2xl p-6 ring-1 shadow-2xl'>
+                <button onClick={onClose} className='absolute right-3 top-3 flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:text-foreground cursor-pointer'>
+                  <X className='size-3.5' />
+                </button>
+                <div className='flex flex-col items-center gap-3 text-center'>
+                  <div className='flex size-14 items-center justify-center rounded-2xl bg-violet-500/10'>
+                    <HeartCrack className='size-7 text-violet-400' />
+                  </div>
+                  <div>
+                    <p className='text-base font-semibold'>很遗憾，未中奖</p>
+                    <p className='text-muted-foreground mt-1 text-sm'>
+                      {card.activity.draw_date} · {pad(card.activity.slot_hour)}:00 场次
+                    </p>
+                  </div>
+                  <div className='bg-muted/50 w-full rounded-xl px-4 py-3 text-sm'>
+                    <span className='text-muted-foreground'>本次中奖：</span>
+                    <span className='font-medium'>{card.activity.winner_name || t('Anonymous')}</span>
+                    <span className='text-muted-foreground mx-1'>·</span>
+                    <span className='font-medium'>{formatQuota(card.activity.winner_quota)}</span>
+                  </div>
+                  <p className='text-muted-foreground text-xs'>下次记得早点报名，祝好运 🤞</p>
+                  <Button variant='outline' className='w-full' onClick={onClose}>知道了</Button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -333,10 +436,7 @@ function RulesCard() {
   const rules = [
     t('3 draws per day — 09:00, 12:00, 17:00'),
     t('Enter each draw separately before the draw time'),
-    t('One winner per draw via weighted random selection'),
-    t('Higher recharge amount = more weight'),
-    t('More API requests = more weight'),
-    t('More check-in days = more weight (up to 30)'),
+    t('One winner is selected daily via weighted random draw'),
     t('Winners receive a redemption code in the draw history'),
   ]
 
@@ -361,6 +461,39 @@ function RulesCard() {
 }
 
 // ─── History Table ────────────────────────────────────────────────────────────
+function HistoryRowCode({ a }: { a: LuckyBagActivity }) {
+  const [copied, setCopied] = useState(false)
+  const isUsed = a.winner_code_status === 3
+  const handleCopy = () => {
+    navigator.clipboard.writeText(a.winner_code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <div className='mt-2 flex flex-wrap items-center gap-2'>
+      <code className='rounded bg-yellow-500/10 px-2 py-0.5 font-mono text-xs font-semibold tracking-wider text-yellow-700 dark:text-yellow-300 select-all'>
+        {a.winner_code}
+      </code>
+      <span className={cn(
+        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+        isUsed
+          ? 'bg-muted text-muted-foreground'
+          : 'bg-green-500/10 text-green-700 dark:text-green-400'
+      )}>
+        {isUsed ? '已使用' : '未使用'}
+      </span>
+      {!isUsed && (
+        <button
+          onClick={handleCopy}
+          className='flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer'
+        >
+          {copied ? <><Check className='size-3' />已复制</> : <><Copy className='size-3' />复制</>}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function HistoryCard({
   activities,
   loading,
@@ -401,66 +534,83 @@ function HistoryCard({
         </div>
       ) : (
         <div className='space-y-1.5'>
-          {activities.map((a, idx) => (
-            <motion.div
-              key={a.id}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.04 }}
-              className={cn(
-                'flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm transition-colors',
-                idx === 0 && page === 1
-                  ? 'border border-yellow-200/50 bg-gradient-to-r from-yellow-50 to-amber-50 dark:border-yellow-800/30 dark:from-yellow-950/20 dark:to-amber-950/20'
-                  : 'bg-muted/30 hover:bg-muted/50'
-              )}
-            >
-              <div className='flex min-w-0 items-center gap-2.5'>
-                {idx === 0 && page === 1 ? (
-                  <Trophy className='size-3.5 shrink-0 text-yellow-500' />
-                ) : (
-                  <Gift className='size-3.5 shrink-0 text-muted-foreground/50' />
+          {activities.map((a, idx) => {
+            const isMyWin = (a.winner_code_status ?? 0) > 0
+            const isLatest = idx === 0 && page === 1
+            return (
+              <motion.div
+                key={a.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.04 }}
+                className={cn(
+                  'rounded-lg px-3.5 py-2.5 text-sm transition-colors',
+                  isMyWin
+                    ? 'border border-yellow-200/50 bg-gradient-to-r from-yellow-50 to-amber-50 dark:border-yellow-800/30 dark:from-yellow-950/20 dark:to-amber-950/20'
+                    : isLatest
+                      ? 'border border-yellow-200/30 bg-muted/40'
+                      : 'bg-muted/30 hover:bg-muted/50'
                 )}
-                <div className='min-w-0'>
-                  <span className='font-medium'>{a.winner_name || t('Anonymous')}</span>
-                  <span className='text-muted-foreground ml-2 text-xs'>
-                    {a.draw_date} {pad(a.slot_hour)}:00
+              >
+                <div className='flex items-center justify-between'>
+                  <div className='flex min-w-0 items-center gap-2.5'>
+                    {isMyWin ? (
+                      <Trophy className='size-3.5 shrink-0 text-yellow-500' />
+                    ) : (
+                      <Gift className='size-3.5 shrink-0 text-muted-foreground/50' />
+                    )}
+                    <div className='min-w-0'>
+                      <span className={cn('font-medium', isMyWin && 'text-yellow-800 dark:text-yellow-200')}>
+                        {a.winner_name || t('Anonymous')}
+                        {isMyWin && <span className='ml-1.5 text-xs font-normal text-yellow-600 dark:text-yellow-400'>（我）</span>}
+                      </span>
+                      <span className='text-muted-foreground ml-2 text-xs'>
+                        {a.draw_date} {pad(a.slot_hour)}:00
+                      </span>
+                    </div>
+                  </div>
+                  <span className={cn(
+                    'ml-2 shrink-0 text-xs font-semibold',
+                    isMyWin ? 'text-yellow-700 dark:text-yellow-400' : 'text-foreground'
+                  )}>
+                    {formatQuota(a.winner_quota)}
                   </span>
                 </div>
-              </div>
-              <span className={cn(
-                'ml-2 shrink-0 text-xs font-semibold',
-                idx === 0 && page === 1 ? 'text-yellow-700 dark:text-yellow-400' : 'text-foreground'
-              )}>
-                {formatQuota(a.winner_quota)}
-              </span>
-            </motion.div>
-          ))}
+                {isMyWin && <HistoryRowCode a={a} />}
+              </motion.div>
+            )
+          })}
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className='flex items-center justify-center gap-1.5 pt-1'>
-          <Button
-            variant='outline'
-            size='sm'
-            className='h-7 px-2.5 text-xs'
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-          >
-            {t('Prev')}
-          </Button>
-          <span className='text-muted-foreground px-1 text-xs'>
-            {page} / {totalPages}
+      {total > 0 && (
+        <div className='flex items-center justify-between border-t border-border/50 pt-3'>
+          <span className='text-muted-foreground text-xs'>
+            第 {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} 条，共 {total} 条
           </span>
-          <Button
-            variant='outline'
-            size='sm'
-            className='h-7 px-2.5 text-xs'
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-          >
-            {t('Next')}
-          </Button>
+          <div className='flex items-center gap-1'>
+            <Button
+              variant='outline'
+              size='sm'
+              className='h-7 px-2.5 text-xs'
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+            >
+              {t('Prev')}
+            </Button>
+            <span className='text-muted-foreground min-w-[3rem] text-center text-xs'>
+              {page} / {Math.max(totalPages, 1)}
+            </span>
+            <Button
+              variant='outline'
+              size='sm'
+              className='h-7 px-2.5 text-xs'
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+            >
+              {t('Next')}
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -475,20 +625,31 @@ export function LuckyBag() {
   const [statusLoading, setStatusLoading] = useState(true)
   const [entered, setEntered] = useState(false)
   const [entering, setEntering] = useState(false)
-  const [weight, setWeight] = useState(1)
 
   const [historyActivities, setHistoryActivities] = useState<LuckyBagActivity[]>([])
   const [historyTotal, setHistoryTotal] = useState(0)
   const [historyPage, setHistoryPage] = useState(1)
   const [historyLoading, setHistoryLoading] = useState(true)
 
-  const fetchStatus = useCallback(async () => {
+  // 弹窗
+  const [dialogCard, setDialogCard] = useState<LuckyBagResultCard | null>(null)
+
+  const fetchStatus = useCallback(async (autoPopDialog = false) => {
     try {
       const res = await getLuckyBagStatus()
       if (res.success && res.data) {
         setStatusData(res.data)
         setEntered(res.data.entered)
-        setWeight(res.data.weight || 1)
+        // 自动弹窗：只弹今天未查看过的中奖结果
+        if (autoPopDialog) {
+          const today = new Date().toISOString().slice(0, 10)
+          const todayCard = (res.data.result_cards ?? []).find(
+            c => c.activity.draw_date === today && c.is_winner && !c.winner_viewed
+          )
+          if (todayCard) {
+            setDialogCard(todayCard)
+          }
+        }
       }
     } catch {
       // ignore
@@ -513,7 +674,7 @@ export function LuckyBag() {
   }, [])
 
   useEffect(() => {
-    fetchStatus()
+    fetchStatus(true)
     fetchHistory(1)
   }, [fetchStatus, fetchHistory])
 
@@ -542,6 +703,17 @@ export function LuckyBag() {
   }
 
   return (
+    <>
+    <ResultDialog
+      card={dialogCard}
+      open={dialogCard !== null}
+      onClose={() => {
+        if (dialogCard) {
+          markLuckyBagViewed(dialogCard.activity.id).catch(() => {})
+        }
+        setDialogCard(null)
+      }}
+    />
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('Lucky Bag')}</SectionPageLayout.Title>
       <SectionPageLayout.Description>
@@ -564,15 +736,13 @@ export function LuckyBag() {
                   participantCount={statusData?.participant_count ?? 0}
                   onEnter={handleEnter}
                   entering={entering}
+                  onDrawTime={() => { fetchStatus(true); fetchHistory(1) }}
                 />
               </motion.div>
             </AnimatePresence>
           )}
 
-          <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
-            <WeightBreakdownCard weight={weight} />
-            <RulesCard />
-          </div>
+          <RulesCard />
 
           <HistoryCard
             activities={historyActivities}
@@ -584,5 +754,6 @@ export function LuckyBag() {
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>
+    </>
   )
 }

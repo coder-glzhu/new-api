@@ -24,3 +24,8 @@ export async function getLuckyBagHistory(
   const res = await api.get('/api/lucky-bag/history', { params: { page, size } })
   return res.data
 }
+
+export async function markLuckyBagViewed(activityId: number): Promise<ApiResponse<null>> {
+  const res = await api.post('/api/lucky-bag/viewed', { activity_id: activityId })
+  return res.data
+}

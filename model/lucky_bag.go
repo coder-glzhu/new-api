@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -30,11 +31,12 @@ type LuckyBagActivity struct {
 
 // LuckyBagEntry 用户报名记录，每人每场只能报名一次
 type LuckyBagEntry struct {
-	Id         int   `json:"id" gorm:"primaryKey;autoIncrement"`
-	ActivityId int   `json:"activity_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
-	UserId     int   `json:"user_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
-	Weight     int   `json:"weight" gorm:"not null;default:1"`
-	CreatedAt  int64 `json:"created_at" gorm:"bigint;autoCreateTime"`
+	Id            int   `json:"id" gorm:"primaryKey;autoIncrement"`
+	ActivityId    int   `json:"activity_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
+	UserId        int   `json:"user_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
+	Weight        int   `json:"weight" gorm:"not null;default:1"`
+	WinnerViewed  int   `json:"winner_viewed" gorm:"not null;default:0"` // 1=用户已查看中奖弹窗
+	CreatedAt     int64 `json:"created_at" gorm:"bigint;autoCreateTime"`
 }
 
 // nextDrawSlot 返回下一场开奖的 (hour, isToday)
@@ -179,7 +181,82 @@ func maskedName(name string) string {
 	return string(b)
 }
 
-// DrawLuckyBag 对指定活动执行加权随机开奖
+// luckyBagDrawCache 预计算缓存：activityId -> drawResult
+type drawResult struct {
+	WinnerUserId int
+	WinnerName   string
+	WinnerQuota  int
+}
+
+var luckyBagDrawCache = struct {
+	sync.Mutex
+	m map[int]*drawResult
+}{m: make(map[int]*drawResult)}
+
+// calcWinnerQuota 根据中奖用户的累计消费计算奖励额度
+// 每消费 50000 quota (~$0.1) 获得 10000 quota 奖励，上限 5000000 (=$10)
+func calcWinnerQuota(userId int) int {
+	user, err := GetUserById(userId, false)
+	if err != nil || user == nil {
+		return 10000 // 最低 $0.02 保底
+	}
+	quota := user.UsedQuota / 50
+	if quota < 500000 {
+		quota = 500000
+	}
+	if quota > 5000000 {
+		quota = 5000000
+	}
+	return quota
+}
+
+// PrepareLuckyBagDraw 提前1分钟预计算开奖结果并缓存，不写库
+func PrepareLuckyBagDraw(activityId int) error {
+	var activity LuckyBagActivity
+	if err := DB.First(&activity, activityId).Error; err != nil {
+		return errors.New("活动不存在")
+	}
+	if activity.Status == "drawn" {
+		return nil
+	}
+
+	var entries []LuckyBagEntry
+	if err := DB.Where("activity_id = ?", activityId).Find(&entries).Error; err != nil {
+		return err
+	}
+
+	result := &drawResult{}
+
+	if len(entries) > 0 {
+		totalWeight := 0
+		for _, e := range entries {
+			totalWeight += e.Weight
+		}
+		pick := rand.Intn(totalWeight)
+		cum := 0
+		winner := entries[0]
+		for _, e := range entries {
+			cum += e.Weight
+			if pick < cum {
+				winner = e
+				break
+			}
+		}
+		result.WinnerUserId = winner.UserId
+		result.WinnerQuota = calcWinnerQuota(winner.UserId)
+
+		if u, _ := GetUserById(winner.UserId, false); u != nil {
+			result.WinnerName = maskedName(u.Username)
+		}
+	}
+
+	luckyBagDrawCache.Lock()
+	luckyBagDrawCache.m[activityId] = result
+	luckyBagDrawCache.Unlock()
+	return nil
+}
+
+// DrawLuckyBag 对指定活动执行开奖，优先使用预计算缓存
 func DrawLuckyBag(activityId int) error {
 	var activity LuckyBagActivity
 	if err := DB.First(&activity, activityId).Error; err != nil {
@@ -200,24 +277,40 @@ func DrawLuckyBag(activityId int) error {
 		}).Error
 	}
 
-	totalWeight := 0
-	for _, e := range entries {
-		totalWeight += e.Weight
-	}
-	pick := rand.Intn(totalWeight)
-	cum := 0
-	winnerEntry := entries[0]
-	for _, e := range entries {
-		cum += e.Weight
-		if pick < cum {
-			winnerEntry = e
-			break
-		}
-	}
+	// 取缓存，若无则临时计算
+	luckyBagDrawCache.Lock()
+	cached := luckyBagDrawCache.m[activityId]
+	delete(luckyBagDrawCache.m, activityId)
+	luckyBagDrawCache.Unlock()
 
-	quota := activity.MinQuota
-	if activity.MaxQuota > activity.MinQuota {
-		quota = activity.MinQuota + rand.Intn(activity.MaxQuota-activity.MinQuota+1)
+	var winnerUserId int
+	var winnerName string
+	var quota int
+
+	if cached != nil && cached.WinnerUserId > 0 {
+		winnerUserId = cached.WinnerUserId
+		winnerName = cached.WinnerName
+		quota = cached.WinnerQuota
+	} else {
+		totalWeight := 0
+		for _, e := range entries {
+			totalWeight += e.Weight
+		}
+		pick := rand.Intn(totalWeight)
+		cum := 0
+		winnerEntry := entries[0]
+		for _, e := range entries {
+			cum += e.Weight
+			if pick < cum {
+				winnerEntry = e
+				break
+			}
+		}
+		winnerUserId = winnerEntry.UserId
+		quota = calcWinnerQuota(winnerUserId)
+		if u, _ := GetUserById(winnerUserId, false); u != nil {
+			winnerName = maskedName(u.Username)
+		}
 	}
 
 	code := common.GetUUID()
@@ -233,24 +326,26 @@ func DrawLuckyBag(activityId int) error {
 		return err
 	}
 
-	winner, _ := GetUserById(winnerEntry.UserId, false)
-	displayName := ""
-	if winner != nil {
-		displayName = maskedName(winner.Username)
-	}
-
 	return DB.Model(&activity).Updates(map[string]any{
 		"status":         "drawn",
-		"winner_user_id": winnerEntry.UserId,
-		"winner_name":    displayName,
+		"winner_user_id": winnerUserId,
+		"winner_name":    winnerName,
 		"winner_quota":   quota,
 		"winner_code":    code,
 		"drawn_at":       time.Now().Unix(),
 	}).Error
 }
 
-// GetLuckyBagHistory 分页获取历史开奖记录
-func GetLuckyBagHistory(page, size int) ([]LuckyBagActivity, int64, error) {
+// LuckyBagHistoryItem 历史开奖记录（含兑换码状态）
+type LuckyBagHistoryItem struct {
+	LuckyBagActivity
+	// 仅对中奖用户自己可见：兑换码状态 1=未使用 3=已使用 0=无（非本人中奖）
+	WinnerCodeStatus int `json:"winner_code_status"`
+}
+
+// GetLuckyBagHistory 分页获取历史开奖记录，附带兑换码使用状态
+// userId: 当前请求用户，用于判断是否显示兑换码状态；传 0 则不查
+func GetLuckyBagHistory(page, size, userId int) ([]LuckyBagHistoryItem, int64, error) {
 	if size <= 0 {
 		size = 10
 	}
@@ -268,7 +363,41 @@ func GetLuckyBagHistory(page, size int) ([]LuckyBagActivity, int64, error) {
 	if err := base.Order("draw_date desc, slot_hour desc").Offset(offset).Limit(size).Find(&activities).Error; err != nil {
 		return nil, 0, err
 	}
-	return activities, total, nil
+
+	// 批量查当前用户中奖场次对应的兑换码状态
+	codeStatusMap := map[string]int{}
+	if userId > 0 {
+		codes := make([]string, 0)
+		for _, a := range activities {
+			if a.WinnerUserId == userId && a.WinnerCode != "" {
+				codes = append(codes, a.WinnerCode)
+			}
+		}
+		if len(codes) > 0 {
+			keyCol := "`key`"
+			if common.UsingPostgreSQL {
+				keyCol = `"key"`
+			}
+			var redemptions []Redemption
+			DB.Select("key, status").Where(keyCol+" IN ?", codes).Find(&redemptions)
+			for _, r := range redemptions {
+				codeStatusMap[r.Key] = r.Status
+			}
+		}
+	}
+
+	items := make([]LuckyBagHistoryItem, len(activities))
+	for i, a := range activities {
+		items[i] = LuckyBagHistoryItem{LuckyBagActivity: a}
+		if userId > 0 && a.WinnerUserId == userId && a.WinnerCode != "" {
+			if s, ok := codeStatusMap[a.WinnerCode]; ok {
+				items[i].WinnerCodeStatus = s
+			} else {
+				items[i].WinnerCodeStatus = 1 // enabled（未使用）
+			}
+		}
+	}
+	return items, total, nil
 }
 
 // GetLuckyBagParticipantCount 获取指定活动报名人数
@@ -276,6 +405,92 @@ func GetLuckyBagParticipantCount(activityId int) (int64, error) {
 	var count int64
 	err := DB.Model(&LuckyBagEntry{}).Where("activity_id = ?", activityId).Count(&count).Error
 	return count, err
+}
+
+// GetUserEnteredActivityIds 返回用户在给定活动 ID 列表中已报名的活动 ID 集合
+func GetUserEnteredActivityIds(userId int, activityIds []int) (map[int]bool, error) {
+	if len(activityIds) == 0 {
+		return map[int]bool{}, nil
+	}
+	var entries []LuckyBagEntry
+	if err := DB.Where("user_id = ? AND activity_id IN ?", userId, activityIds).Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	m := make(map[int]bool, len(entries))
+	for _, e := range entries {
+		m[e.ActivityId] = true
+	}
+	return m, nil
+}
+
+// UserEntryInfo 用户对某活动的报名信息快照
+type UserEntryInfo struct {
+	Entered      bool
+	WinnerViewed bool
+}
+
+// GetUserEntryInfos 返回用户在给定活动 ID 列表中的报名信息（是否报名 + 是否已看弹窗）
+func GetUserEntryInfos(userId int, activityIds []int) (map[int]UserEntryInfo, error) {
+	if len(activityIds) == 0 {
+		return map[int]UserEntryInfo{}, nil
+	}
+	var entries []LuckyBagEntry
+	if err := DB.Where("user_id = ? AND activity_id IN ?", userId, activityIds).Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	m := make(map[int]UserEntryInfo, len(entries))
+	for _, e := range entries {
+		m[e.ActivityId] = UserEntryInfo{Entered: true, WinnerViewed: e.WinnerViewed == 1}
+	}
+	return m, nil
+}
+
+// MarkWinnerViewed 标记用户已查看某场次的中奖弹窗
+func MarkWinnerViewed(userId, activityId int) error {
+	return DB.Model(&LuckyBagEntry{}).
+		Where("user_id = ? AND activity_id = ?", userId, activityId).
+		Update("winner_viewed", 1).Error
+}
+
+// RecentDrawnResult 最近已开奖且用户参与的活动，附带报名信息
+type RecentDrawnResult struct {
+	Activity     LuckyBagActivity
+	IsWinner     bool
+	WinnerViewed bool
+}
+
+// GetRecentDrawnResultsForUser 返回最近2天内用户参与过且已开奖的活动（按时间倒序）
+func GetRecentDrawnResultsForUser(userId int) ([]RecentDrawnResult, error) {
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	var activities []LuckyBagActivity
+	if err := DB.Where("status = ? AND draw_date >= ?", "drawn", yesterday).
+		Order("draw_date desc, slot_hour desc").Find(&activities).Error; err != nil {
+		return nil, err
+	}
+	if len(activities) == 0 {
+		return nil, nil
+	}
+	ids := make([]int, len(activities))
+	for i, a := range activities {
+		ids[i] = a.Id
+	}
+	infoMap, err := GetUserEntryInfos(userId, ids)
+	if err != nil {
+		return nil, err
+	}
+	var result []RecentDrawnResult
+	for _, a := range activities {
+		info, entered := infoMap[a.Id]
+		if !entered {
+			continue
+		}
+		result = append(result, RecentDrawnResult{
+			Activity:     a,
+			IsWinner:     a.WinnerUserId == userId,
+			WinnerViewed: info.WinnerViewed,
+		})
+	}
+	return result, nil
 }
 
 // UpdateLuckyBagActivityConfig 管理员更新指定场次奖品区间
