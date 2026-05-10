@@ -84,11 +84,25 @@ func runLuckyBagDrawOnce() {
 
 		slotKey := slot.Key()
 		remindKey := slotKey - 60 // 开奖前 1 小时
-		lockKey := slotKey - 1   // 开奖前 1 分钟
+		lockKey := slotKey - 1    // 开奖前 1 分钟
 
 		// 1) 提醒（允许前后 1 分钟的容差）
 		if nowKey == remindKey || nowKey == remindKey+1 {
-			logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] tick: sending reminder for slot %02d:%02d (nowKey=%d remindKey=%d)", slot.Hour, slot.Minute, nowKey, remindKey))
+			activity, err := model.GetOrCreateActivity(slotDate, slot)
+			if err != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] tick: GetOrCreateActivity failed for reminder %02d:%02d: %v", slot.Hour, slot.Minute, err))
+				continue
+			}
+			won, err := model.MarkActivityReminderNotified(activity.Id)
+			if err != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] tick: mark reminder failed for slot %02d:%02d activityId=%d: %v", slot.Hour, slot.Minute, activity.Id, err))
+				continue
+			}
+			if !won {
+				logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] tick: reminder already sent for slot %02d:%02d activityId=%d (nowKey=%d remindKey=%d)", slot.Hour, slot.Minute, activity.Id, nowKey, remindKey))
+				continue
+			}
+			logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] tick: sending reminder for slot %02d:%02d activityId=%d (nowKey=%d remindKey=%d)", slot.Hour, slot.Minute, activity.Id, nowKey, remindKey))
 			s := slot
 			gopool.Go(func() {
 				if err := SendWechatGroupReminder(s.Hour, s.Minute); err != nil {
@@ -174,6 +188,9 @@ func dispatchDrawResultNotify(ctx context.Context, a *model.LuckyBagActivity) {
 	}
 	if !won {
 		return // 已有另一路派发，跳过
+	}
+	if a.WinnerUserId > 0 {
+		a.WinnerName = model.FormatLuckyBagWinnerName(a.WinnerUserId, a.WinnerName)
 	}
 	notSkipped, sendErr := SendWechatDrawResult(a.WinnerName, a.WinnerQuota, a.DrawDate, a.SlotHour, a.SlotMinute)
 	if sendErr != nil {

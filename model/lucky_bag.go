@@ -97,30 +97,31 @@ const (
 
 // LuckyBagActivity 每天每场一条活动记录
 type LuckyBagActivity struct {
-	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	DrawDate     string `json:"draw_date" gorm:"type:varchar(10);uniqueIndex:idx_lucky_bag_date_slot_v2"` // YYYY-MM-DD
-	SlotHour     int    `json:"slot_hour" gorm:"not null;uniqueIndex:idx_lucky_bag_date_slot_v2"`          // 0~23
-	SlotMinute   int    `json:"slot_minute" gorm:"not null;default:0;uniqueIndex:idx_lucky_bag_date_slot_v2"` // 0~59
-	MinQuota     int    `json:"min_quota" gorm:"not null;default:500000"`  // 默认 $1
-	MaxQuota     int    `json:"max_quota" gorm:"not null;default:5000000"` // 默认 $10
-	Status       string `json:"status" gorm:"type:varchar(20);default:'pending'"` // pending / locked / drawn
-	WinnerUserId int    `json:"winner_user_id" gorm:"default:0"`
-	WinnerName   string `json:"winner_name" gorm:"type:varchar(100)"`
-	WinnerQuota  int    `json:"winner_quota" gorm:"default:0"`
-	WinnerCode     string `json:"winner_code" gorm:"type:varchar(64)"`
-	DrawnAt        int64  `json:"drawn_at" gorm:"bigint;default:0"`
-	ResultNotified int    `json:"-" gorm:"not null;default:0"` // 1=微信群通知已发送，防止重复/补发
-	CreatedAt      int64  `json:"created_at" gorm:"bigint;autoCreateTime"`
+	Id               int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	DrawDate         string `json:"draw_date" gorm:"type:varchar(10);uniqueIndex:idx_lucky_bag_date_slot_v2"`     // YYYY-MM-DD
+	SlotHour         int    `json:"slot_hour" gorm:"not null;uniqueIndex:idx_lucky_bag_date_slot_v2"`             // 0~23
+	SlotMinute       int    `json:"slot_minute" gorm:"not null;default:0;uniqueIndex:idx_lucky_bag_date_slot_v2"` // 0~59
+	MinQuota         int    `json:"min_quota" gorm:"not null;default:500000"`                                     // 默认 $1
+	MaxQuota         int    `json:"max_quota" gorm:"not null;default:5000000"`                                    // 默认 $10
+	Status           string `json:"status" gorm:"type:varchar(20);default:'pending'"`                             // pending / locked / drawn
+	WinnerUserId     int    `json:"winner_user_id" gorm:"default:0"`
+	WinnerName       string `json:"winner_name" gorm:"type:varchar(100)"`
+	WinnerQuota      int    `json:"winner_quota" gorm:"default:0"`
+	WinnerCode       string `json:"winner_code" gorm:"type:varchar(64)"`
+	DrawnAt          int64  `json:"drawn_at" gorm:"bigint;default:0"`
+	ReminderNotified int    `json:"-" gorm:"not null;default:0"` // 1=开奖前提醒已发送，防止多实例重复提醒
+	ResultNotified   int    `json:"-" gorm:"not null;default:0"` // 1=微信群通知已发送，防止重复/补发
+	CreatedAt        int64  `json:"created_at" gorm:"bigint;autoCreateTime"`
 }
 
 // LuckyBagEntry 用户报名记录，每人每场只能报名一次
 type LuckyBagEntry struct {
-	Id            int   `json:"id" gorm:"primaryKey;autoIncrement"`
-	ActivityId    int   `json:"activity_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
-	UserId        int   `json:"user_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
-	Weight        int   `json:"weight" gorm:"not null;default:1"`
-	WinnerViewed  int   `json:"winner_viewed" gorm:"not null;default:0"` // 1=用户已查看中奖弹窗
-	CreatedAt     int64 `json:"created_at" gorm:"bigint;autoCreateTime"`
+	Id           int   `json:"id" gorm:"primaryKey;autoIncrement"`
+	ActivityId   int   `json:"activity_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
+	UserId       int   `json:"user_id" gorm:"not null;index;uniqueIndex:idx_lucky_bag_entry_user"`
+	Weight       int   `json:"weight" gorm:"not null;default:1"`
+	WinnerViewed int   `json:"winner_viewed" gorm:"not null;default:0"` // 1=用户已查看中奖弹窗
+	CreatedAt    int64 `json:"created_at" gorm:"bigint;autoCreateTime"`
 }
 
 // nextDrawSlot 返回"下一场"的 (date, slot)
@@ -397,18 +398,64 @@ func GetUserNextEntry(userId int) (*LuckyBagEntry, *LuckyBagActivity, error) {
 	return &entry, activity, nil
 }
 
-// maskedName 保留首字符，其余用 *
-func maskedName(name string) string {
+func maskNameToken(name string) string {
 	runes := []rune(name)
-	if len(runes) <= 1 {
-		return string(runes)
+	switch len(runes) {
+	case 0:
+		return ""
+	case 1:
+		return "*"
+	case 2:
+		return string(runes[:1]) + "*"
+	case 3:
+		return string(runes[:1]) + "*" + string(runes[2:])
+	case 4:
+		return string(runes[:2]) + "*" + string(runes[3:])
+	default:
+		return string(runes[:2]) + "***" + string(runes[len(runes)-2:])
 	}
-	var b []byte
-	b = append(b, []byte(string(runes[0]))...)
-	for i := 1; i < len(runes); i++ {
-		b = append(b, '*')
+}
+
+func maskWinnerUsername(username string) string {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return ""
 	}
-	return string(b)
+	if at := strings.Index(username, "@"); at > 0 {
+		return maskNameToken(username[:at]) + "@***"
+	}
+	return maskNameToken(username)
+}
+
+func formatLuckyBagWinnerName(userId int, username string) string {
+	masked := maskWinnerUsername(username)
+	if userId <= 0 {
+		return masked
+	}
+	if masked == "" {
+		return fmt.Sprintf("UID %d", userId)
+	}
+	return fmt.Sprintf("%s（UID %d）", masked, userId)
+}
+
+func FormatLuckyBagWinnerName(userId int, fallback string) string {
+	if userId <= 0 {
+		return fallback
+	}
+	if u, _ := GetUserById(userId, false); u != nil {
+		return formatLuckyBagWinnerName(userId, u.Username)
+	}
+	if fallback != "" {
+		return fallback
+	}
+	return fmt.Sprintf("UID %d", userId)
+}
+
+func applyLuckyBagWinnerDisplayName(a *LuckyBagActivity) {
+	if a == nil || a.WinnerUserId <= 0 {
+		return
+	}
+	a.WinnerName = FormatLuckyBagWinnerName(a.WinnerUserId, a.WinnerName)
 }
 
 // calcWinnerQuota 在管理员为该场次配置的 [MinQuota, MaxQuota] 区间内随机生成奖金
@@ -462,7 +509,7 @@ func pickWinnerAndPersist(activity *LuckyBagActivity, entries []LuckyBagEntry, t
 	quota := calcWinnerQuota(activity)
 	winnerName := ""
 	if u, _ := GetUserById(winnerUserId, false); u != nil {
-		winnerName = maskedName(u.Username)
+		winnerName = formatLuckyBagWinnerName(winnerUserId, u.Username)
 	}
 	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] pickWinnerAndPersist activityId=%d: totalWeight=%d pick=%d winnerUserId=%d winnerName=%q quota=%d (range=[%d,%d])",
 		activity.Id, totalWeight, pick, winnerUserId, winnerName, quota, activity.MinQuota, activity.MaxQuota))
@@ -615,6 +662,7 @@ func GetLuckyBagHistory(page, size, userId int) ([]LuckyBagHistoryItem, int64, e
 
 	items := make([]LuckyBagHistoryItem, len(activities))
 	for i, a := range activities {
+		applyLuckyBagWinnerDisplayName(&a)
 		items[i] = LuckyBagHistoryItem{LuckyBagActivity: a}
 		if userId > 0 && a.WinnerUserId == userId && a.WinnerCode != "" {
 			if s, ok := codeStatusMap[a.WinnerCode]; ok {
@@ -679,6 +727,18 @@ func MarkWinnerViewed(userId, activityId int) error {
 		Update("winner_viewed", 1).Error
 }
 
+// MarkActivityReminderNotified 原子地把 reminder_notified 从 0 置为 1。
+// 返回 true 表示本次获得提醒发送权；false 表示其他实例已经发送过。
+func MarkActivityReminderNotified(activityId int) (bool, error) {
+	res := DB.Model(&LuckyBagActivity{}).
+		Where("id = ? AND reminder_notified = 0", activityId).
+		Update("reminder_notified", 1)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
 // MarkActivityResultNotified 原子地把 result_notified 从 0 置为 1。
 // 返回 true 表示本次获得通知权（未发过）；false 表示已发过或活动不存在。
 func MarkActivityResultNotified(activityId int) (bool, error) {
@@ -737,6 +797,7 @@ func GetRecentDrawnResultsForUser(userId int) ([]RecentDrawnResult, error) {
 		if !entered {
 			continue
 		}
+		applyLuckyBagWinnerDisplayName(&a)
 		result = append(result, RecentDrawnResult{
 			Activity:     a,
 			IsWinner:     a.WinnerUserId == userId,

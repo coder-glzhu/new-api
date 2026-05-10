@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -41,6 +42,7 @@ func SendWechatGroupReminder(slotHour, slotMinute int) error {
 		msg = fmt.Sprintf("🧧 福袋抽奖提醒：今天 %02d:%02d 将开始抽福袋，快来报名参与！记得准时参与哦～", slotHour, slotMinute)
 	}
 
+	logger.LogInfo(context.Background(), fmt.Sprintf("wechat reminder: dispatching slot=%02d:%02d groups=%q msg_len=%d msg_hash=%s", slotHour, slotMinute, groupIdsRaw, len(msg), messageFingerprint(msg)))
 	return sendToGroupsWithDelay(userId, groupIdsRaw, msg)
 }
 
@@ -116,6 +118,7 @@ func SendWechatGroupMessage(msg string) error {
 
 	// 测试发送同步进行，不使用随机延迟
 	groupIds := splitGroupIds(groupIdsRaw)
+	logger.LogInfo(context.Background(), fmt.Sprintf("wechat test message: dispatching groups=%d msg_len=%d msg_hash=%s", len(groupIds), len(msg), messageFingerprint(msg)))
 	var lastErr error
 	for _, gid := range groupIds {
 		if err := sendWechatGroupMessage(userId, gid, msg); err != nil {
@@ -134,6 +137,7 @@ func sendToGroupsWithDelay(userId, groupIdsRaw, msg string) error {
 
 	// 第一群立即发送，后续群在 goroutine 里延迟发送
 	ctx := context.Background()
+	logger.LogInfo(ctx, fmt.Sprintf("wechat notify: dispatch start groups=%d first_group=%s msg_len=%d msg_hash=%s", len(groupIds), groupIds[0], len(msg), messageFingerprint(msg)))
 	var firstErr error
 	if err := sendWechatGroupMessage(userId, groupIds[0], msg); err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("wechat notify: group %s: %v", groupIds[0], err))
@@ -143,6 +147,7 @@ func sendToGroupsWithDelay(userId, groupIdsRaw, msg string) error {
 	for _, gid := range groupIds[1:] {
 		gidCopy := gid
 		delay := time.Duration(3+rand.Intn(6)) * time.Second
+		logger.LogInfo(ctx, fmt.Sprintf("wechat notify: scheduling delayed group message group=%s delay=%s msg_hash=%s", gidCopy, delay, messageFingerprint(msg)))
 		gopool.Go(func() {
 			time.Sleep(delay)
 			if err := sendWechatGroupMessage(userId, gidCopy, msg); err != nil {
@@ -157,13 +162,23 @@ func sendToGroupsWithDelay(userId, groupIdsRaw, msg string) error {
 func splitGroupIds(raw string) []string {
 	parts := strings.Split(raw, ",")
 	result := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			seen[p] = struct{}{}
 			result = append(result, p)
 		}
 	}
 	return result
+}
+
+func messageFingerprint(message string) string {
+	sum := sha256.Sum256([]byte(message))
+	return fmt.Sprintf("%x", sum[:6])
 }
 
 func sendWechatGroupMessage(userId, groupId, message string) error {
@@ -178,12 +193,18 @@ func sendWechatGroupMessage(userId, groupId, message string) error {
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
+	ctx := context.Background()
+	msgHash := messageFingerprint(message)
+	start := time.Now()
+	logger.LogInfo(ctx, fmt.Sprintf("wechat notify: POST group-message user=%s group=%s msg_len=%d msg_hash=%s", userId, groupId, len(message), msgHash))
 	resp, err := client.Post(wechatGroupMessageAPI, "application/json", bytes.NewReader(payload))
 	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("wechat notify: POST failed user=%s group=%s msg_hash=%s duration=%s err=%v", userId, groupId, msgHash, time.Since(start), err))
 		return err
 	}
 	defer resp.Body.Close()
 
+	logger.LogInfo(ctx, fmt.Sprintf("wechat notify: POST completed user=%s group=%s status=%d msg_hash=%s duration=%s", userId, groupId, resp.StatusCode, msgHash, time.Since(start)))
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("wechat API returned status %d", resp.StatusCode)
 	}

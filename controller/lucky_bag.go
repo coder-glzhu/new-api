@@ -39,6 +39,7 @@ func LuckyBagStatus(c *gin.Context) {
 	}
 	for i := range todayActivities {
 		maskLockedActivity(todayActivities[i])
+		todayActivities[i].WinnerName = model.FormatLuckyBagWinnerName(todayActivities[i].WinnerUserId, todayActivities[i].WinnerName)
 		// 非本人中奖的场次不暴露兑换码
 		if todayActivities[i].WinnerUserId != userId {
 			todayActivities[i].WinnerCode = ""
