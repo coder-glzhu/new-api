@@ -6,14 +6,30 @@ export interface LuckyBagActivity {
   min_quota: number
   max_quota: number
   status: 'pending' | 'drawn'
+  // 第1名
   winner_user_id: number
   winner_name: string
   winner_quota: number
   winner_code: string
+  // 第2名
+  winner2_user_id: number
+  winner2_name: string
+  winner2_quota: number
+  winner2_code: string
+  // 第3名
+  winner3_user_id: number
+  winner3_name: string
+  winner3_quota: number
+  winner3_code: string
+
   drawn_at: number
   created_at: number
-  // 仅历史记录中当前用户中奖时有值：1=未使用 3=已使用 0=非本人中奖
-  winner_code_status?: number
+
+  // 仅历史记录中当前用户中奖时有值
+  my_winner_rank?: number   // 0=未中奖，1/2/3
+  winner_code_status?: number   // 1=未使用 3=已使用
+  winner2_code_status?: number
+  winner3_code_status?: number
 }
 
 export interface DrawSlot {
@@ -32,6 +48,7 @@ export interface LuckyBagEntry {
 export interface LuckyBagResultCard {
   activity: LuckyBagActivity
   is_winner: boolean
+  winner_rank: number // 0=未中奖，1/2/3
   winner_viewed: boolean
 }
 

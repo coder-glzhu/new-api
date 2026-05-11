@@ -189,10 +189,23 @@ func dispatchDrawResultNotify(ctx context.Context, a *model.LuckyBagActivity) {
 	if !won {
 		return // 已有另一路派发，跳过
 	}
-	if a.WinnerUserId > 0 {
-		a.WinnerName = model.FormatLuckyBagWinnerName(a.WinnerUserId, a.WinnerName)
+	// 构建三名获奖者通知列表
+	var winners []WechatDrawWinner
+	for _, pair := range []struct {
+		uid  int
+		name string
+		q    int
+	}{
+		{a.WinnerUserId, a.WinnerName, a.WinnerQuota},
+		{a.Winner2UserId, a.Winner2Name, a.Winner2Quota},
+		{a.Winner3UserId, a.Winner3Name, a.Winner3Quota},
+	} {
+		if pair.uid > 0 {
+			name := model.FormatLuckyBagWinnerName(pair.uid, pair.name)
+			winners = append(winners, WechatDrawWinner{Name: name, Quota: pair.q})
+		}
 	}
-	notSkipped, sendErr := SendWechatDrawResult(a.WinnerName, a.WinnerQuota, a.DrawDate, a.SlotHour, a.SlotMinute)
+	notSkipped, sendErr := SendWechatDrawResult(winners, a.DrawDate, a.SlotHour, a.SlotMinute)
 	if sendErr != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("lucky bag: wechat notify failed (%s %02d:%02d): %v; rolling back flag for retry", a.DrawDate, a.SlotHour, a.SlotMinute, sendErr))
 		// 回滚以便后续 tick 重试
@@ -209,5 +222,5 @@ func dispatchDrawResultNotify(ctx context.Context, a *model.LuckyBagActivity) {
 		logger.LogInfo(ctx, fmt.Sprintf("lucky bag: notify skipped (wechat bot not enabled) for %s %02d:%02d", a.DrawDate, a.SlotHour, a.SlotMinute))
 		return
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("lucky bag: wechat result notified for %s %02d:%02d winner=%q", a.DrawDate, a.SlotHour, a.SlotMinute, a.WinnerName))
+	logger.LogInfo(ctx, fmt.Sprintf("lucky bag: wechat result notified for %s %02d:%02d winners=%d", a.DrawDate, a.SlotHour, a.SlotMinute, len(winners)))
 }

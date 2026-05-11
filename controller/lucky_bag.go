@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// maskLockedActivity 把 locked 状态的活动对外伪装成 pending，隐藏已预计算但未到开奖时刻的 winner 字段
+// maskLockedActivity 把 locked 状态的活动对外伪装成 pending，隐藏所有获奖者字段
 func maskLockedActivity(a *model.LuckyBagActivity) {
 	if a == nil || a.Status != model.LuckyBagStatusLocked {
 		return
@@ -22,6 +22,14 @@ func maskLockedActivity(a *model.LuckyBagActivity) {
 	a.WinnerName = ""
 	a.WinnerQuota = 0
 	a.WinnerCode = ""
+	a.Winner2UserId = 0
+	a.Winner2Name = ""
+	a.Winner2Quota = 0
+	a.Winner2Code = ""
+	a.Winner3UserId = 0
+	a.Winner3Name = ""
+	a.Winner3Quota = 0
+	a.Winner3Code = ""
 	a.DrawnAt = 0
 }
 
@@ -39,10 +47,19 @@ func LuckyBagStatus(c *gin.Context) {
 	}
 	for i := range todayActivities {
 		maskLockedActivity(todayActivities[i])
+		// 格式化三名获奖者显示名
 		todayActivities[i].WinnerName = model.FormatLuckyBagWinnerName(todayActivities[i].WinnerUserId, todayActivities[i].WinnerName)
-		// 非本人中奖的场次不暴露兑换码
+		todayActivities[i].Winner2Name = model.FormatLuckyBagWinnerName(todayActivities[i].Winner2UserId, todayActivities[i].Winner2Name)
+		todayActivities[i].Winner3Name = model.FormatLuckyBagWinnerName(todayActivities[i].Winner3UserId, todayActivities[i].Winner3Name)
+		// 非本人中奖的名次不暴露兑换码
 		if todayActivities[i].WinnerUserId != userId {
 			todayActivities[i].WinnerCode = ""
+		}
+		if todayActivities[i].Winner2UserId != userId {
+			todayActivities[i].Winner2Code = ""
+		}
+		if todayActivities[i].Winner3UserId != userId {
+			todayActivities[i].Winner3Code = ""
 		}
 	}
 
@@ -71,19 +88,27 @@ func LuckyBagStatus(c *gin.Context) {
 	type ResultCard struct {
 		Activity     *model.LuckyBagActivity `json:"activity"`
 		IsWinner     bool                    `json:"is_winner"`
+		WinnerRank   int                     `json:"winner_rank"` // 0=未中奖，1/2/3
 		WinnerViewed bool                    `json:"winner_viewed"`
 	}
 	var resultCards []ResultCard
 	recentResults, _ := model.GetRecentDrawnResultsForUser(userId)
 	for i := range recentResults {
 		r := &recentResults[i]
-		// 非本人中奖不暴露兑换码
-		if !r.IsWinner {
+		// 隐藏非本人中奖名次的兑换码
+		if r.Activity.WinnerUserId != userId {
 			r.Activity.WinnerCode = ""
+		}
+		if r.Activity.Winner2UserId != userId {
+			r.Activity.Winner2Code = ""
+		}
+		if r.Activity.Winner3UserId != userId {
+			r.Activity.Winner3Code = ""
 		}
 		resultCards = append(resultCards, ResultCard{
 			Activity:     &r.Activity,
 			IsWinner:     r.IsWinner,
+			WinnerRank:   r.WinnerRank,
 			WinnerViewed: r.WinnerViewed,
 		})
 	}
@@ -167,10 +192,16 @@ func LuckyBagHistory(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	// 隐藏 winner_code：非本人中奖的记录不暴露兑换码
+	// 隐藏三名获奖者兑换码：非本人中奖的名次不暴露
 	for i := range items {
 		if items[i].WinnerUserId != userId {
 			items[i].WinnerCode = ""
+		}
+		if items[i].Winner2UserId != userId {
+			items[i].Winner2Code = ""
+		}
+		if items[i].Winner3UserId != userId {
+			items[i].Winner3Code = ""
 		}
 	}
 	common.ApiSuccess(c, gin.H{

@@ -46,11 +46,16 @@ func SendWechatGroupReminder(slotHour, slotMinute int) error {
 	return sendToGroupsWithDelay(userId, groupIdsRaw, msg)
 }
 
-// SendWechatDrawResult 向配置的群发送开奖结果（多群随机延迟）
-// 模板占位符：{winner}=脱敏用户名, {quota}=金额(元), {date}=日期, {hour}=小时, {minute}=分钟, {time}=HH:MM
-// 若本场无人参与（winnerName 为空），发送"无人参与"的固定文案，不使用自定义模板
-// 返回 notSkipped=true 表示真实调用了上游发送；false 表示 未配置/未开启 被静默跳过（调用方应视为"未发"）
-func SendWechatDrawResult(winnerName string, quota int, drawDate string, slotHour, slotMinute int) (notSkipped bool, err error) {
+// WechatDrawWinner 单名获奖者信息（用于通知）
+type WechatDrawWinner struct {
+	Name  string
+	Quota int
+}
+
+// SendWechatDrawResult 向配置的群发送开奖结果（支持最多3名获奖者）
+// winners 按名次顺序传入（最多3个），空切片表示无人参与。
+// 返回 notSkipped=true 表示真实调用了上游发送；false 表示 未配置/未开启 被静默跳过。
+func SendWechatDrawResult(winners []WechatDrawWinner, drawDate string, slotHour, slotMinute int) (notSkipped bool, err error) {
 	if common.OptionMap == nil {
 		logger.LogWarn(context.Background(), "wechat draw result: OptionMap is nil; skipping")
 		return false, nil
@@ -75,26 +80,48 @@ func SendWechatDrawResult(winnerName string, quota int, drawDate string, slotHou
 
 	timeDisplay := fmt.Sprintf("%02d:%02d", slotHour, slotMinute)
 	var msg string
-	if winnerName == "" {
-		// 无人参与的场次
+
+	// 过滤掉空名字的获奖者
+	var validWinners []WechatDrawWinner
+	for _, w := range winners {
+		if w.Name != "" {
+			validWinners = append(validWinners, w)
+		}
+	}
+
+	if len(validWinners) == 0 {
 		msg = fmt.Sprintf("🎁 福袋开奖结果：%s %s 场次本轮无人参与，下一场早点来抢哦～", drawDate, timeDisplay)
-	} else {
-		quotaDisplay := fmt.Sprintf("%.2f", float64(quota)/500000.0)
-		msg = resultContent
-		if msg == "" {
-			msg = "🎉 福袋开奖结果：{date} {time} 场次，恭喜 {winner} 获得价值 {quota} 元的额度！请及时登录平台核销兑换码。"
+	} else if len(validWinners) == 1 {
+		// 兼容单名获奖者的自定义模板
+		quotaDisplay := fmt.Sprintf("%.2f", float64(validWinners[0].Quota)/500000.0)
+		tmpl := resultContent
+		if tmpl == "" {
+			tmpl = "🎉 福袋开奖结果：{date} {time} 场次，恭喜 {winner} 获得价值 {quota} 元的额度！请及时登录平台核销兑换码。"
 		}
 		msg = strings.NewReplacer(
-			"{winner}", winnerName,
+			"{winner}", validWinners[0].Name,
 			"{quota}", quotaDisplay,
 			"{date}", drawDate,
 			"{hour}", fmt.Sprintf("%02d", slotHour),
 			"{minute}", fmt.Sprintf("%02d", slotMinute),
 			"{time}", timeDisplay,
-		).Replace(msg)
+		).Replace(tmpl)
+	} else {
+		// 多名获奖者：列表格式
+		var lines []string
+		medals := []string{"🥇", "🥈", "🥉"}
+		for i, w := range validWinners {
+			quotaDisplay := fmt.Sprintf("%.2f", float64(w.Quota)/500000.0)
+			medal := ""
+			if i < len(medals) {
+				medal = medals[i]
+			}
+			lines = append(lines, fmt.Sprintf("%s %s 获得 %s 元额度", medal, w.Name, quotaDisplay))
+		}
+		msg = fmt.Sprintf("🎉 福袋开奖结果：%s %s 场次\n%s\n请及时登录平台核销兑换码。", drawDate, timeDisplay, strings.Join(lines, "\n"))
 	}
 
-	logger.LogInfo(ctx, fmt.Sprintf("wechat draw result: sending to groups %q (%s %02d:%02d)", groupIdsRaw, drawDate, slotHour, slotMinute))
+	logger.LogInfo(ctx, fmt.Sprintf("wechat draw result: sending to groups %q (%s %02d:%02d) winners=%d", groupIdsRaw, drawDate, slotHour, slotMinute, len(validWinners)))
 	if err := sendToGroupsWithDelay(userId, groupIdsRaw, msg); err != nil {
 		return true, err
 	}

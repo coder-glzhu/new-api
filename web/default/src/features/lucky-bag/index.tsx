@@ -27,7 +27,6 @@ import { useNextDrawCountdown } from './hooks'
 import type { LuckyBagActivity, LuckyBagResultCard, LuckyBagStatusResponse } from './types'
 
 type DrawAnimationPhase = 'idle' | 'shaking' | 'opening'
-type ViewportPoint = { x: number; y: number }
 
 const HISTORY_PAGE_SIZE = 10
 
@@ -463,9 +462,8 @@ function DrawProgressTimeline({
             const isNext =
               !isDrawn && !isPastTime && slot.hour === nextHour && slot.minute === nextMinute
             const isAwaiting = !isDrawn && isPastTime
-            const winnerDisplay = activity.winner_name
-              ? splitWinnerDisplayName(activity.winner_name)
-              : null
+            const winners = [activity.winner_name, activity.winner2_name, activity.winner3_name].filter(Boolean)
+            const winnerDisplay = winners.length > 0 ? splitWinnerDisplayName(winners[0]) : null
 
             return (
               <div
@@ -531,14 +529,12 @@ function DrawProgressTimeline({
                   <div className='mt-0.5 min-h-[1.1rem]'>
                     {isDrawn ? (
                       winnerDisplay ? (
-                        <div title={activity.winner_name}>
+                        <div title={winners.join(' / ')}>
                           <p className='block max-w-full truncate text-[10px] font-semibold text-zinc-100'>
                             {winnerDisplay.name}
                           </p>
-                          {winnerDisplay.uid && (
-                            <p className='truncate text-[9px] tabular-nums text-zinc-500'>
-                              UID {winnerDisplay.uid}
-                            </p>
+                          {winners.length > 1 && (
+                            <p className='text-[9px] text-zinc-500'>+{winners.length - 1}</p>
                           )}
                         </div>
                       ) : (
@@ -572,7 +568,6 @@ function ActivityCard({
   onEnter,
   entering,
   drawAnimationPhase,
-  onBagCenterChange,
 }: {
   statusData: LuckyBagStatusResponse | null
   entered: boolean
@@ -580,7 +575,6 @@ function ActivityCard({
   onEnter: () => void
   entering: boolean
   drawAnimationPhase: DrawAnimationPhase
-  onBagCenterChange: (center: ViewportPoint) => void
 }) {
   const { t } = useTranslation()
   const bagButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -633,32 +627,13 @@ function ActivityCard({
             opacity: { duration: 0.2, ease: 'easeOut' },
           }
 
-  useLayoutEffect(() => {
-    const updateBagCenter = () => {
-      const rect = bagButtonRef.current?.getBoundingClientRect()
-      if (!rect) return
-      onBagCenterChange({
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-      })
-    }
-
-    updateBagCenter()
-    window.addEventListener('resize', updateBagCenter)
-    window.addEventListener('scroll', updateBagCenter, true)
-
-    return () => {
-      window.removeEventListener('resize', updateBagCenter)
-      window.removeEventListener('scroll', updateBagCenter, true)
-    }
-  }, [onBagCenterChange])
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className='relative flex h-full min-h-[27rem] flex-col overflow-hidden rounded-[26px] border border-white/8 bg-[#12101b]/92 shadow-[0_28px_70px_-36px_rgba(0,0,0,0.8)]'
+      className='relative flex flex-col overflow-hidden rounded-[26px] border border-white/8 bg-[#12101b]/92 shadow-[0_28px_70px_-36px_rgba(0,0,0,0.8)]'
       style={{
         boxShadow:
           'inset 0 1px 0 rgba(255,255,255,0.05), 0 30px 70px -34px rgba(0,0,0,0.86)',
@@ -924,8 +899,22 @@ function WinnerCard({ card, onClose }: { card: LuckyBagResultCard; onClose: () =
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
+  const rank = card.winner_rank || 1
+  const rankLabels: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+  const rankLabel = rankLabels[rank] ?? '🏅'
+
+  // 根据名次取对应的 quota 和 code
+  const winnerQuota =
+    rank === 1 ? card.activity.winner_quota
+    : rank === 2 ? card.activity.winner2_quota
+    : card.activity.winner3_quota
+  const winnerCode =
+    rank === 1 ? card.activity.winner_code
+    : rank === 2 ? card.activity.winner2_code
+    : card.activity.winner3_code
+
   const handleCopy = async () => {
-    await copyToClipboard(card.activity.winner_code)
+    await copyToClipboard(winnerCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -1092,17 +1081,23 @@ function WinnerCard({ card, onClose }: { card: LuckyBagResultCard; onClose: () =
           <p className='text-[10px] font-medium uppercase tracking-[0.32em] text-amber-300/70'>
             {t('Winner Notice')}
           </p>
-          <h2
-            className='mt-2 text-2xl font-semibold leading-tight tracking-tight'
-            style={{
-              background:
-                'linear-gradient(180deg, #fef3c7 0%, #fcd34d 45%, #d4af37 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              filter: 'drop-shadow(0 1px 8px rgba(212,175,55,0.25))',
-            }}
-          >
+          <div className='mt-2 flex items-center justify-center gap-2'>
+            <span className='text-2xl'>{rankLabel}</span>
+            <span
+              className='text-2xl font-bold leading-tight tracking-tight'
+              style={{
+                background:
+                  'linear-gradient(180deg, #fef3c7 0%, #fcd34d 45%, #d4af37 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                filter: 'drop-shadow(0 1px 8px rgba(212,175,55,0.25))',
+              }}
+            >
+              {t('Place {{rank}}', { rank })}
+            </span>
+          </div>
+          <h2 className='mt-1 text-base font-semibold text-amber-100/80'>
             {t('Congratulations, you won!')}
           </h2>
           <p className='mt-2 text-[11px] tabular-nums text-amber-200/55'>
@@ -1142,7 +1137,7 @@ function WinnerCard({ card, onClose }: { card: LuckyBagResultCard; onClose: () =
               filter: 'drop-shadow(0 3px 10px rgba(212,175,55,0.32))',
             }}
           >
-            {formatQuota(card.activity.winner_quota)}
+            {formatQuota(winnerQuota)}
           </p>
         </motion.div>
 
@@ -1161,7 +1156,7 @@ function WinnerCard({ card, onClose }: { card: LuckyBagResultCard; onClose: () =
             }}
           >
             <p className='select-all break-all font-mono text-xs font-semibold leading-relaxed text-amber-100/90'>
-              {card.activity.winner_code}
+              {winnerCode}
             </p>
             <motion.button
               type='button'
@@ -1428,12 +1423,10 @@ function ResultDialog({
   card,
   open,
   onClose,
-  center,
 }: {
   card: LuckyBagResultCard | null
   open: boolean
   onClose: () => void
-  center: ViewportPoint | null
 }) {
   return (
     <AnimatePresence>
@@ -1454,11 +1447,7 @@ function ResultDialog({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 12 }}
             transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className='fixed z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-4'
-            style={{
-              left: center ? center.x : '50%',
-              top: center ? center.y : '50%',
-            }}
+            className='fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-4'
           >
             {card.is_winner ? (
               <WinnerCard card={card} onClose={onClose} />
@@ -1504,49 +1493,76 @@ function RulesCard({ drawSlots }: { drawSlots?: { hour: number; minute: number }
 
 // ─── History (Right column) ───────────────────────────────────────────────────
 // Activity archive panel with subtle emphasis for personal wins and compact pagination.
-function HistoryRowCode({ a }: { a: LuckyBagActivity }) {
+// ─── WinnerRow — one winner within a HistoryItem ────────────────────────────
+function WinnerRow({
+  name,
+  quota,
+  code,
+  codeStatus,
+  isMe,
+  placeLabel,
+  visual,
+}: {
+  name: string
+  quota: number
+  code: string
+  codeStatus?: number
+  isMe: boolean
+  placeLabel: string
+  visual: ReturnType<typeof getRowStyle>
+}) {
   const { t } = useTranslation()
+  const display = splitWinnerDisplayName(name)
   const [copied, setCopied] = useState(false)
-  const isUsed = a.winner_code_status === 3
+  const isUsed = codeStatus === 3
+
   const handleCopy = async () => {
-    await copyToClipboard(a.winner_code)
+    await copyToClipboard(code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
   return (
-    <div className='mt-1.5 flex flex-wrap items-center gap-1.5'>
-      <code className='select-all rounded-full border border-white/8 bg-black/30 px-2 py-0.5 font-mono text-[9px] font-semibold tracking-[0.1em] text-amber-100/85'>
-        {a.winner_code}
-      </code>
-      <span
-        className={cn(
-          'rounded-full px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.18em]',
-          isUsed
-            ? 'bg-white/6 text-zinc-500'
-            : 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-300',
-        )}
+    <div className={cn('flex items-start gap-2 py-1', isMe && 'rounded-xl px-1.5 bg-amber-300/5')}>
+      <span className='mt-0.5 shrink-0 text-[9px] font-bold text-zinc-500 w-4 text-center'>{placeLabel}</span>
+      <div
+        className='flex size-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold text-white'
+        style={{ background: visual.chip }}
       >
-        {isUsed ? t('Used') : t('Unused')}
-      </span>
-      {!isUsed && (
-        <button
-          type='button'
-          onClick={handleCopy}
-          className='flex cursor-pointer items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[9px] text-zinc-400 transition-colors hover:text-amber-100'
-        >
-          {copied ? (
-            <>
-              <Check className='size-3' />
-              {t('Copied')}
-            </>
-          ) : (
-            <>
-              <Copy className='size-3' />
-              {t('Copy')}
-            </>
+        {getAvatarInitial(display.name)}
+      </div>
+      <div className='min-w-0 flex-1'>
+        <div className='flex items-center gap-1.5'>
+          <span className={cn('truncate text-[11px] font-semibold', isMe ? 'text-amber-100' : 'text-zinc-100')}>
+            {display.name || t('Anonymous')}
+          </span>
+          {display.uid && <span className='text-[9px] tabular-nums text-zinc-500'>UID {display.uid}</span>}
+          {isMe && (
+            <span className='shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-emerald-300'>
+              {t('You')}
+            </span>
           )}
-        </button>
-      )}
+        </div>
+        {isMe && code && (
+          <div className='mt-1 flex flex-wrap items-center gap-1.5'>
+            <code className='select-all rounded-full border border-white/8 bg-black/30 px-2 py-0.5 font-mono text-[9px] font-semibold tracking-[0.1em] text-amber-100/85'>
+              {code}
+            </code>
+            <span className={cn('rounded-full px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.18em]', isUsed ? 'bg-white/6 text-zinc-500' : 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-300')}>
+              {isUsed ? t('Used') : t('Unused')}
+            </span>
+            {!isUsed && (
+              <button type='button' onClick={handleCopy} className='flex cursor-pointer items-center gap-1 rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[9px] text-zinc-400 transition-colors hover:text-amber-100'>
+                {copied ? <><Check className='size-3' />{t('Copied')}</> : <><Copy className='size-3' />{t('Copy')}</>}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className='shrink-0 text-right'>
+        <span className='block text-[11px] font-semibold tabular-nums text-amber-200'>{formatQuota(quota)}</span>
+        <span className='block text-[8px] uppercase tracking-[0.18em] text-zinc-500'>quota</span>
+      </div>
     </div>
   )
 }
@@ -1554,91 +1570,58 @@ function HistoryRowCode({ a }: { a: LuckyBagActivity }) {
 // ─── HistoryItem — single row in the winners list ───────────────────────────
 function HistoryItem({ activity, rank }: { activity: LuckyBagActivity; rank: number }) {
   const { t } = useTranslation()
-  const isMyWin = (activity.winner_code_status ?? 0) > 0
-  const winnerDisplay = activity.winner_name
-    ? splitWinnerDisplayName(activity.winner_name)
-    : null
-  const hasReward = activity.winner_quota > 0
+  const myRank = activity.my_winner_rank ?? 0
+  const isMyWin = myRank > 0
   const visual = getRowStyle(rank - 1)
-  const winnerName = winnerDisplay?.name || t('Anonymous')
-  const avatarInitial = getAvatarInitial(winnerDisplay?.name)
+
+  const winners = [
+    { name: activity.winner_name, quota: activity.winner_quota, code: activity.winner_code, codeStatus: activity.winner_code_status, rank: 1 },
+    { name: activity.winner2_name, quota: activity.winner2_quota, code: activity.winner2_code, codeStatus: activity.winner2_code_status, rank: 2 },
+    { name: activity.winner3_name, quota: activity.winner3_quota, code: activity.winner3_code, codeStatus: activity.winner3_code_status, rank: 3 },
+  ].filter(w => w.name)
+
+  const placeLabels = ['🥇', '🥈', '🥉']
 
   return (
     <div
       className={cn(
-        'group relative flex items-start gap-2 rounded-2xl border px-2.5 py-1.5 transition-colors sm:px-3',
+        'group relative rounded-2xl border px-2.5 py-1.5 transition-colors sm:px-3',
         isMyWin
           ? 'border-amber-300/20 bg-gradient-to-r from-amber-300/10 via-white/[0.03] to-transparent'
           : 'border-white/6 bg-white/[0.03] hover:bg-white/[0.05]',
       )}
-      style={
-        {
-          boxShadow: isMyWin
-            ? `inset 0 0 0 1px rgba(217,174,69,0.12), 0 8px 24px -18px ${visual.glow}`
-            : 'inset 0 0 0 1px rgba(255,255,255,0.02)',
-        }
-      }
+      style={{
+        boxShadow: isMyWin
+          ? `inset 0 0 0 1px rgba(217,174,69,0.12), 0 8px 24px -18px ${visual.glow}`
+          : 'inset 0 0 0 1px rgba(255,255,255,0.02)',
+      }}
     >
-      <div className='flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-zinc-400'>
-        {rank}
+      <div className='mb-1 flex items-center justify-between'>
+        <p className='truncate text-[9px] tabular-nums text-zinc-500'>
+          <span>{activity.draw_date}</span>
+          <span className='mx-1 text-zinc-600'>·</span>
+          <span>{pad(activity.slot_hour)}:{pad(activity.slot_minute)}</span>
+        </p>
+        <span className='text-[9px] text-zinc-600'>#{rank}</span>
       </div>
-      <div
-        className='flex size-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-semibold text-white'
-        style={{
-          background: visual.chip,
-          boxShadow: `0 10px 22px -14px ${visual.glow}, inset 0 1px 0 rgba(255,255,255,0.22)`,
-        }}
-      >
-        {avatarInitial}
-      </div>
-      <div className='min-w-0 flex-1'>
-        <div className='flex items-start justify-between gap-2'>
-          <div className='min-w-0'>
-            <div className='flex items-center gap-2'>
-              <span
-                className={cn(
-                  'truncate text-[11px] font-semibold',
-                  isMyWin ? 'text-amber-100' : 'text-zinc-100',
-                )}
-              >
-                {winnerName}
-              </span>
-              {isMyWin && (
-                <span className='shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-emerald-300'>
-                  {t('You')}
-                </span>
-              )}
-            </div>
-            <p className='truncate text-[9px] tabular-nums text-zinc-500'>
-              <span>{activity.draw_date}</span>
-              <span className='mx-1 text-zinc-600'>·</span>
-              <span>
-                {pad(activity.slot_hour)}:{pad(activity.slot_minute)}
-              </span>
-              {winnerDisplay?.uid && (
-                <>
-                  <span className='mx-1 text-zinc-600'>·</span>
-                  <span>UID {winnerDisplay.uid}</span>
-                </>
-              )}
-            </p>
-            {isMyWin && <HistoryRowCode a={activity} />}
-          </div>
-          <div className='shrink-0 text-right'>
-            <span
-              className='block text-sm font-semibold tabular-nums tracking-tight text-amber-200'
-              style={{
-                textShadow: hasReward ? `0 0 18px ${visual.glow}` : 'none',
-              }}
-            >
-              {formatQuota(activity.winner_quota)}
-            </span>
-            <span className='block text-[8px] uppercase tracking-[0.18em] text-zinc-500'>
-              quota
-            </span>
-          </div>
+      {winners.length === 0 ? (
+        <p className='text-[10px] text-zinc-500 px-1'>{t('No entries')}</p>
+      ) : (
+        <div className='divide-y divide-white/5'>
+          {winners.map((w, i) => (
+            <WinnerRow
+              key={w.rank}
+              name={w.name}
+              quota={w.quota}
+              code={w.code}
+              codeStatus={w.codeStatus}
+              isMe={myRank === w.rank}
+              placeLabel={placeLabels[i] ?? `${i + 1}`}
+              visual={getRowStyle(i)}
+            />
+          ))}
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -1666,7 +1649,7 @@ function HistoryWinnersList({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-      className='relative flex h-full min-h-[28rem] flex-col overflow-hidden rounded-[24px] border border-[#5f4d21]/60 bg-[#111019]/95 p-2.5 shadow-[0_28px_70px_-36px_rgba(0,0,0,0.85)] sm:p-3'
+      className='relative flex h-full flex-col overflow-hidden rounded-[24px] border border-[#5f4d21]/60 bg-[#111019]/95 p-2.5 shadow-[0_28px_70px_-36px_rgba(0,0,0,0.85)] sm:p-3'
       style={{
         boxShadow:
           'inset 0 1px 0 rgba(255,255,255,0.05), 0 30px 72px -36px rgba(0,0,0,0.86)',
@@ -1704,7 +1687,7 @@ function HistoryWinnersList({
         )}
       </div>
 
-      <div className='relative min-h-0 flex-1'>
+      <div className='relative min-h-0 flex-1 overflow-y-auto'>
         {loading ? (
           <div className='space-y-1.5'>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -1788,6 +1771,11 @@ function DebugPanel({
   onSetHistoryLoading,
   onRefetchStatus,
   onClearViewed,
+  onShowWinnerRank2,
+  onShowWinnerRank3,
+  onSetHistoryThreeWinners,
+  onSetResultCardRank2,
+  onSetResultCardRank3,
 }: {
   statusData: LuckyBagStatusResponse | null
   onShowWinner: () => void
@@ -1806,6 +1794,11 @@ function DebugPanel({
   onSetHistoryLoading: () => void
   onRefetchStatus: () => void
   onClearViewed: () => void
+  onShowWinnerRank2: () => void
+  onShowWinnerRank3: () => void
+  onSetHistoryThreeWinners: () => void
+  onSetResultCardRank2: () => void
+  onSetResultCardRank3: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const groups = [
@@ -1816,6 +1809,8 @@ function DebugPanel({
         { label: '未中奖：福袋动画后弹窗', onClick: onShowLoser },
         { label: '直接显示中奖弹窗', onClick: onShowWinnerDirect },
         { label: '直接显示未中奖弹窗', onClick: onShowLoserDirect },
+        { label: '直接显示第2名弹窗', onClick: onShowWinnerRank2 },
+        { label: '直接显示第3名弹窗', onClick: onShowWinnerRank3 },
       ],
     },
     {
@@ -1836,6 +1831,14 @@ function DebugPanel({
         { label: '很多中奖记录分页', onClick: onSetHistoryMany },
         { label: '显示空记录', onClick: onSetHistoryEmpty },
         { label: '显示加载状态', onClick: onSetHistoryLoading },
+      ],
+    },
+    {
+      title: '多名中奖展示',
+      buttons: [
+        { label: '开奖记录：1/2/3名全部展示', onClick: onSetHistoryThreeWinners },
+        { label: '结果卡：我是第2名', onClick: onSetResultCardRank2 },
+        { label: '结果卡：我是第3名', onClick: onSetResultCardRank3 },
       ],
     },
     {
@@ -1919,7 +1922,6 @@ export function LuckyBag() {
   const [debugHistoryDataset, setDebugHistoryDataset] = useState<LuckyBagActivity[] | null>(null)
 
   const [dialogCard, setDialogCard] = useState<LuckyBagResultCard | null>(null)
-  const [bagCenter, setBagCenter] = useState<ViewportPoint | null>(null)
   const [drawAnimationPhase, setDrawAnimationPhase] = useState<DrawAnimationPhase>('idle')
   const drawAnimationTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
@@ -2328,6 +2330,199 @@ export function LuckyBag() {
             : prev,
         )
       },
+      // 第2/3名中奖弹窗
+      showWinnerRank2: () => {
+        const today = new Date().toISOString().slice(0, 10)
+        setDialogCard({
+          activity: buildDebugActivity({
+            status: 'drawn',
+            draw_date: today,
+            winner_user_id: 99,
+            winner_name: '🥇 赵一（UID 99）',
+            winner_quota: 5_000_000,
+            winner_code: 'DEBUG-RANK1-CODE-XXXX',
+            winner2_user_id: 1,
+            winner2_name: '你',
+            winner2_quota: 3_000_000,
+            winner2_code: 'DEBUG-RANK2-CODE-XXXX',
+            winner3_user_id: 88,
+            winner3_name: '🥉 王三（UID 88）',
+            winner3_quota: 1_500_000,
+            winner3_code: 'DEBUG-RANK3-CODE-XXXX',
+            drawn_at: Math.floor(Date.now() / 1000),
+          }),
+          is_winner: true,
+          winner_rank: 2,
+          winner_viewed: false,
+        })
+      },
+      showWinnerRank3: () => {
+        const today = new Date().toISOString().slice(0, 10)
+        setDialogCard({
+          activity: buildDebugActivity({
+            status: 'drawn',
+            draw_date: today,
+            winner_user_id: 99,
+            winner_name: '🥇 赵一（UID 99）',
+            winner_quota: 5_000_000,
+            winner_code: 'DEBUG-RANK1-CODE-XXXX',
+            winner2_user_id: 88,
+            winner2_name: '🥈 李二（UID 88）',
+            winner2_quota: 3_000_000,
+            winner2_code: 'DEBUG-RANK2-CODE-XXXX',
+            winner3_user_id: 1,
+            winner3_name: '你',
+            winner3_quota: 1_500_000,
+            winner3_code: 'DEBUG-RANK3-CODE-XXXX',
+            drawn_at: Math.floor(Date.now() / 1000),
+          }),
+          is_winner: true,
+          winner_rank: 3,
+          winner_viewed: false,
+        })
+      },
+      // 开奖记录：1/2/3名全部展示
+      setHistoryThreeWinners: () => {
+        const today = new Date().toISOString().slice(0, 10)
+        setDebugHistoryDataset(null)
+        setHistoryLoading(false)
+        setHistoryPage(1)
+        setHistoryTotal(3)
+        setHistoryActivities([
+          buildDebugActivity({
+            id: -901,
+            draw_date: today,
+            slot_hour: 9,
+            slot_minute: 0,
+            status: 'drawn',
+            winner_user_id: 1,
+            winner_name: '你',
+            winner_quota: 5_000_000,
+            winner_code: 'DEBUG-3W-RANK1',
+            winner_code_status: 1,
+            winner2_user_id: 42,
+            winner2_name: '李**（UID 42）',
+            winner2_quota: 3_000_000,
+            winner2_code: 'DEBUG-3W-RANK2',
+            winner3_user_id: 88,
+            winner3_name: '王**（UID 88）',
+            winner3_quota: 1_500_000,
+            winner3_code: 'DEBUG-3W-RANK3',
+            my_winner_rank: 1,
+            drawn_at: Math.floor(Date.now() / 1000) - 3600,
+          }),
+          buildDebugActivity({
+            id: -902,
+            draw_date: today,
+            slot_hour: 12,
+            slot_minute: 0,
+            status: 'drawn',
+            winner_user_id: 55,
+            winner_name: '张**（UID 55）',
+            winner_quota: 5_000_000,
+            winner_code: 'DEBUG-3W2-RANK1',
+            winner2_user_id: 1,
+            winner2_name: '你',
+            winner2_quota: 3_000_000,
+            winner2_code: 'DEBUG-3W2-RANK2',
+            winner2_code_status: 1,
+            winner3_user_id: 66,
+            winner3_name: '陈**（UID 66）',
+            winner3_quota: 1_500_000,
+            winner3_code: 'DEBUG-3W2-RANK3',
+            my_winner_rank: 2,
+            drawn_at: Math.floor(Date.now() / 1000) - 1800,
+          }),
+          buildDebugActivity({
+            id: -903,
+            draw_date: today,
+            slot_hour: 17,
+            slot_minute: 0,
+            status: 'drawn',
+            winner_user_id: 77,
+            winner_name: '孙**（UID 77）',
+            winner_quota: 5_000_000,
+            winner_code: 'DEBUG-3W3-RANK1',
+            winner2_user_id: 88,
+            winner2_name: '周**（UID 88）',
+            winner2_quota: 3_000_000,
+            winner2_code: 'DEBUG-3W3-RANK2',
+            winner3_user_id: 99,
+            winner3_name: '吴**（UID 99）',
+            winner3_quota: 1_500_000,
+            winner3_code: 'DEBUG-3W3-RANK3',
+            my_winner_rank: 0,
+            drawn_at: Math.floor(Date.now() / 1000) - 600,
+          }),
+        ])
+      },
+      // 结果卡：我中了第2/3名
+      setResultCardRank2: () => {
+        const today = new Date().toISOString().slice(0, 10)
+        const activity = buildDebugActivity({
+          id: -910,
+          draw_date: today,
+          slot_hour: 12,
+          slot_minute: 0,
+          status: 'drawn',
+          winner_user_id: 55,
+          winner_name: '张**（UID 55）',
+          winner_quota: 5_000_000,
+          winner_code: 'DEBUG-RC2-RANK1',
+          winner2_user_id: 1,
+          winner2_name: '你',
+          winner2_quota: 3_000_000,
+          winner2_code: 'DEBUG-RC2-MY-CODE',
+          winner2_code_status: 1,
+          winner3_user_id: 88,
+          winner3_name: '王**（UID 88）',
+          winner3_quota: 1_500_000,
+          winner3_code: 'DEBUG-RC2-RANK3',
+          my_winner_rank: 2,
+          drawn_at: Math.floor(Date.now() / 1000),
+        })
+        setStatusData((prev) =>
+          prev
+            ? {
+                ...prev,
+                result_cards: [{ activity, is_winner: true, winner_rank: 2, winner_viewed: false }],
+              }
+            : prev,
+        )
+      },
+      setResultCardRank3: () => {
+        const today = new Date().toISOString().slice(0, 10)
+        const activity = buildDebugActivity({
+          id: -911,
+          draw_date: today,
+          slot_hour: 17,
+          slot_minute: 0,
+          status: 'drawn',
+          winner_user_id: 55,
+          winner_name: '张**（UID 55）',
+          winner_quota: 5_000_000,
+          winner_code: 'DEBUG-RC3-RANK1',
+          winner2_user_id: 42,
+          winner2_name: '李**（UID 42）',
+          winner2_quota: 3_000_000,
+          winner2_code: 'DEBUG-RC3-RANK2',
+          winner3_user_id: 1,
+          winner3_name: '你',
+          winner3_quota: 1_500_000,
+          winner3_code: 'DEBUG-RC3-MY-CODE',
+          winner3_code_status: 1,
+          my_winner_rank: 3,
+          drawn_at: Math.floor(Date.now() / 1000),
+        })
+        setStatusData((prev) =>
+          prev
+            ? {
+                ...prev,
+                result_cards: [{ activity, is_winner: true, winner_rank: 3, winner_viewed: false }],
+              }
+            : prev,
+        )
+      },
     }),
     [
       applyDebugHistoryMany,
@@ -2337,6 +2532,13 @@ export function LuckyBag() {
       fetchHistory,
       fetchStatus,
       revealResultAfterBagAnimation,
+      setDialogCard,
+      setStatusData,
+      setDebugHistoryDataset,
+      setHistoryLoading,
+      setHistoryPage,
+      setHistoryTotal,
+      setHistoryActivities,
     ],
   )
 
@@ -2345,7 +2547,6 @@ export function LuckyBag() {
       <ResultDialog
         card={dialogCard}
         open={dialogCard !== null}
-        center={bagCenter}
         onClose={() => {
           if (dialogCard && dialogCard.activity.id > 0) {
             markLuckyBagViewed(dialogCard.activity.id).catch(() => {})
@@ -2390,7 +2591,7 @@ export function LuckyBag() {
           })}
         </div>
 
-        <div className='relative mx-auto flex min-h-full w-full max-w-[1240px] flex-col justify-center gap-4 px-3 pb-2.5 pt-0 sm:px-4 lg:px-5 lg:pb-3 lg:pt-0'>
+        <div className='relative mx-auto flex min-h-full w-full max-w-[1240px] flex-col justify-center gap-4 px-3 pb-2.5 pt-5 sm:px-4 sm:pt-7 lg:px-5 lg:pb-3 lg:pt-8'>
           <div className='flex justify-center pb-1.5 text-center'>
             <p
               className='bg-[linear-gradient(90deg,rgba(251,191,36,0.76)_0%,#fde68a_28%,#fff7cc_50%,#fde68a_72%,rgba(251,191,36,0.76)_100%)] bg-clip-text text-[clamp(1.18rem,2.5vw,2.05rem)] font-semibold leading-none text-transparent drop-shadow-[0_2px_14px_rgba(217,174,69,0.22)]'
@@ -2405,8 +2606,8 @@ export function LuckyBag() {
 
           <div className='grid items-stretch gap-2.5 lg:grid-cols-[minmax(0,0.98fr)_minmax(300px,0.68fr)]'>
             {statusLoading ? (
-              <div className='flex h-full flex-col gap-2.5'>
-                <div className='min-h-[27rem] rounded-[26px] border border-white/8 bg-white/[0.03] p-2.5 sm:p-3'>
+              <div className='flex flex-col gap-2.5'>
+                <div className='rounded-[26px] border border-white/8 bg-white/[0.03] p-2.5 sm:p-3'>
                   <div className='flex h-full flex-col gap-2'>
                     <Skeleton className='h-8 w-full rounded-2xl bg-white/8' />
                     <Skeleton className='mt-1 h-[16rem] w-full rounded-full bg-white/8' />
@@ -2416,7 +2617,7 @@ export function LuckyBag() {
                 <Skeleton className='h-[7.5rem] w-full rounded-[24px] bg-white/8' />
               </div>
             ) : (
-              <div className='flex h-full flex-col gap-2.5'>
+              <div className='flex flex-col gap-2.5'>
                 <ActivityCard
                   statusData={statusData}
                   entered={entered}
@@ -2424,7 +2625,6 @@ export function LuckyBag() {
                   onEnter={handleEnter}
                   entering={entering}
                   drawAnimationPhase={drawAnimationPhase}
-                  onBagCenterChange={setBagCenter}
                 />
                 <DrawStatusPanel
                   statusData={statusData}
@@ -2433,13 +2633,17 @@ export function LuckyBag() {
               </div>
             )}
 
-            <HistoryWinnersList
-              activities={historyActivities}
-              loading={historyLoading}
-              total={historyTotal}
-              page={historyPage}
-              onPageChange={handlePageChange}
-            />
+            <div className='relative'>
+              <div className='absolute inset-0'>
+                <HistoryWinnersList
+                  activities={historyActivities}
+                  loading={historyLoading}
+                  total={historyTotal}
+                  page={historyPage}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            </div>
           </div>
 
           <RulesCard drawSlots={statusData?.draw_slots} />
@@ -2463,6 +2667,11 @@ export function LuckyBag() {
               onSetHistoryLoading={debugHandlers.setHistoryLoading}
               onRefetchStatus={debugHandlers.refetch}
               onClearViewed={debugHandlers.clearViewed}
+              onShowWinnerRank2={debugHandlers.showWinnerRank2}
+              onShowWinnerRank3={debugHandlers.showWinnerRank3}
+              onSetHistoryThreeWinners={debugHandlers.setHistoryThreeWinners}
+              onSetResultCardRank2={debugHandlers.setResultCardRank2}
+              onSetResultCardRank3={debugHandlers.setResultCardRank3}
             />
           )}
         </div>
