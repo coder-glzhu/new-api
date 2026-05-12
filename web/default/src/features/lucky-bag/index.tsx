@@ -1687,7 +1687,7 @@ function HistoryWinnersList({
         )}
       </div>
 
-      <div className='relative min-h-0 flex-1 overflow-y-auto'>
+      <div className='relative min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]'>
         {loading ? (
           <div className='space-y-1.5'>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -2633,8 +2633,8 @@ export function LuckyBag() {
               </div>
             )}
 
-            <div className='relative'>
-              <div className='absolute inset-0'>
+            <div className='relative min-h-[28rem] lg:min-h-0'>
+              <div className='relative h-full lg:absolute lg:inset-0'>
                 <HistoryWinnersList
                   activities={historyActivities}
                   loading={historyLoading}
