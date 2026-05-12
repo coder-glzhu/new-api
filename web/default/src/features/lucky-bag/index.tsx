@@ -276,7 +276,6 @@ function JoinStatusButton({
   entered,
   entering,
   todayFinished,
-  nextLocked,
   isNextDrawn,
   onEnter,
   hint,
@@ -284,13 +283,12 @@ function JoinStatusButton({
   entered: boolean
   entering: boolean
   todayFinished: boolean
-  nextLocked: boolean
   isNextDrawn: boolean
   onEnter: () => void
   hint?: string
 }) {
   const { t } = useTranslation()
-  const canEnter = !entered && !entering && !todayFinished && !nextLocked && !isNextDrawn
+  const canEnter = !entered && !entering && !todayFinished && !isNextDrawn
 
   const disabledShell =
     'flex h-10 w-full items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] text-xs font-semibold text-zinc-500'
@@ -336,13 +334,6 @@ function JoinStatusButton({
         <Check className='size-4 text-amber-100/52' strokeWidth={3} />
         <span>{t('Entered')}</span>
       </button>
-    )
-  } else if (nextLocked) {
-    body = (
-      <div className={disabledShell}>
-        <Hourglass className='size-4' />
-        {t('Drawing soon')}
-      </div>
     )
   } else if (isNextDrawn) {
     body = <div className={disabledShell}>{t('Already drawn')}</div>
@@ -580,10 +571,9 @@ function ActivityCard({
   const bagButtonRef = useRef<HTMLButtonElement | null>(null)
   const nextActivity = statusData?.next_activity
   const isNextDrawn = nextActivity?.status === 'drawn'
-  const nextLocked = statusData?.next_locked ?? false
   const todayFinished = statusData?.today_finished ?? false
   const drawBusy = drawAnimationPhase !== 'idle'
-  const bagDisabled = entering || entered || todayFinished || nextLocked || isNextDrawn || drawBusy
+  const bagDisabled = entering || entered || todayFinished || isNextDrawn || drawBusy
 
   const hint = todayFinished || entered
     ? undefined
@@ -831,7 +821,6 @@ function ActivityCard({
               entered={entered}
               entering={entering}
               todayFinished={todayFinished}
-              nextLocked={nextLocked}
               isNextDrawn={isNextDrawn}
               onEnter={onEnter}
               hint={hint}
@@ -1762,7 +1751,6 @@ function DebugPanel({
   onSetAvailable,
   onSetEntered,
   onSetEntering,
-  onSetLocked,
   onSetTodayFinished,
   onSetNextDrawn,
   onSetHistorySamples,
@@ -1785,7 +1773,6 @@ function DebugPanel({
   onSetAvailable: () => void
   onSetEntered: () => void
   onSetEntering: () => void
-  onSetLocked: () => void
   onSetTodayFinished: () => void
   onSetNextDrawn: () => void
   onSetHistorySamples: () => void
@@ -1819,7 +1806,6 @@ function DebugPanel({
         { label: '未报名：可参与', onClick: onSetAvailable },
         { label: '已报名：等待开奖', onClick: onSetEntered },
         { label: '报名中', onClick: onSetEntering },
-        { label: '即将开奖锁定', onClick: onSetLocked },
         { label: '今日已结束', onClick: onSetTodayFinished },
         { label: '下一场已开奖', onClick: onSetNextDrawn },
       ],
@@ -1873,8 +1859,7 @@ function DebugPanel({
         </p>
         <span className='ml-auto text-[10px] tabular-nums text-zinc-500'>
           entered={String(statusData?.entered ?? false)} · finished=
-          {String(statusData?.today_finished ?? false)} · locked=
-          {String(statusData?.next_locked ?? false)}
+          {String(statusData?.today_finished ?? false)}
         </span>
         <button
           type='button'
@@ -2134,13 +2119,11 @@ export function LuckyBag() {
       enteredValue,
       enteringValue = false,
       todayFinished = false,
-      nextLocked = false,
       nextDrawn = false,
     }: {
       enteredValue: boolean
       enteringValue?: boolean
       todayFinished?: boolean
-      nextLocked?: boolean
       nextDrawn?: boolean
     }) => {
       clearDrawAnimationTimers()
@@ -2206,7 +2189,6 @@ export function LuckyBag() {
           { hour: 17, minute: 0 },
         ],
         today_finished: todayFinished,
-        next_locked: nextLocked,
       })
     },
     [clearDrawAnimationTimers],
@@ -2294,7 +2276,6 @@ export function LuckyBag() {
       setAvailable: () => applyDebugStatus({ enteredValue: false }),
       setEntered: () => applyDebugStatus({ enteredValue: true }),
       setEntering: () => applyDebugStatus({ enteredValue: false, enteringValue: true }),
-      setLocked: () => applyDebugStatus({ enteredValue: false, nextLocked: true }),
       setTodayFinished: () => applyDebugStatus({ enteredValue: false, todayFinished: true }),
       setNextDrawn: () => applyDebugStatus({ enteredValue: false, nextDrawn: true }),
       setHistorySamples: applyDebugHistorySamples,
@@ -2658,7 +2639,6 @@ export function LuckyBag() {
               onSetAvailable={debugHandlers.setAvailable}
               onSetEntered={debugHandlers.setEntered}
               onSetEntering={debugHandlers.setEntering}
-              onSetLocked={debugHandlers.setLocked}
               onSetTodayFinished={debugHandlers.setTodayFinished}
               onSetNextDrawn={debugHandlers.setNextDrawn}
               onSetHistorySamples={debugHandlers.setHistorySamples}

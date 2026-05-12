@@ -61,7 +61,6 @@ export interface LuckyBagStatusResponse {
   result_cards: LuckyBagResultCard[] | null
   draw_slots: DrawSlot[]
   today_finished: boolean
-  next_locked: boolean
 }
 
 export interface LuckyBagHistoryResponse {
