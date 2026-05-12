@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 import { createSectionRegistry } from '@/features/system-settings/utils/section-registry'
 import { HupijiaoSettingsSection } from './hupijiao-settings-section'
+import { InviteRewardsSection } from './invite-rewards-section'
 import { LuckyBagSection } from './lucky-bag-section'
 import { WechatBotSection } from './wechat-bot-section'
 import type { CustomIntegrationSettings } from './types'
@@ -28,6 +29,7 @@ function resolveAddonDefaults(
     HupijiaoNotifyUrl: settings.HupijiaoNotifyUrl ?? '',
     HupijiaoReturnUrl: settings.HupijiaoReturnUrl ?? '',
     HupijiaoMinTopUp: settings.HupijiaoMinTopUp ?? 1,
+    HupijiaoInviteRewardRatio: settings.HupijiaoInviteRewardRatio ?? 0.2,
   }
 }
 
@@ -54,6 +56,14 @@ const CUSTOM_INTEGRATIONS_SECTIONS = [
     descriptionKey: 'Configuration for Alipay payments through Hupijiao',
     build: (settings: CustomIntegrationSettings) => (
       <HupijiaoSettingsSection defaultValues={resolveAddonDefaults(settings)} />
+    ),
+  },
+  {
+    id: 'invite-rewards',
+    titleKey: 'Invitation Rewards',
+    descriptionKey: 'Configure rewards for invited users who pay through Hupijiao',
+    build: (settings: CustomIntegrationSettings) => (
+      <InviteRewardsSection defaultValues={resolveAddonDefaults(settings)} />
     ),
   },
 ] as const

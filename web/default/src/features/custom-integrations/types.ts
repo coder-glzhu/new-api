@@ -18,4 +18,5 @@ export type CustomIntegrationSettings = {
   HupijiaoNotifyUrl: string
   HupijiaoReturnUrl: string
   HupijiaoMinTopUp: number
+  HupijiaoInviteRewardRatio: number
 }

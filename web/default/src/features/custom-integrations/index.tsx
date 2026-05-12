@@ -24,6 +24,7 @@ const defaultSettings: CustomIntegrationSettings = {
   HupijiaoNotifyUrl: '',
   HupijiaoReturnUrl: '',
   HupijiaoMinTopUp: 1,
+  HupijiaoInviteRewardRatio: 0.2,
 }
 
 export function CustomIntegrationsSettings() {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/samber/hot"
 	"gorm.io/gorm"
@@ -201,9 +202,9 @@ func (p *SubscriptionPlan) IsWithinSaleWindow() bool {
 type SaleWindowStatus int
 
 const (
-	SaleWindowOpen      SaleWindowStatus = iota // 正在销售
-	SaleWindowNotYet                            // 未到开售时间
-	SaleWindowEnded                             // 已过结束时间
+	SaleWindowOpen   SaleWindowStatus = iota // 正在销售
+	SaleWindowNotYet                         // 未到开售时间
+	SaleWindowEnded                          // 已过结束时间
 )
 
 // CheckSaleWindow reports whether the plan is currently purchasable.
@@ -499,7 +500,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, errors.New("已达到该套餐购买上限")
 		}
 	}
-	nowUnix := GetDBTimestamp()
+	nowUnix := getDBTimestampTx(tx)
 	now := time.Unix(nowUnix, 0)
 	endUnix, err := calcPlanEndTime(now, plan)
 	if err != nil {
@@ -578,7 +579,7 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		if order.Status != common.TopUpStatusPending {
 			return ErrSubscriptionOrderStatusInvalid
 		}
-		plan, err := GetSubscriptionPlanById(order.PlanId)
+		plan, err := getSubscriptionPlanByIdTx(tx, order.PlanId)
 		if err != nil {
 			return err
 		}
@@ -1286,6 +1287,8 @@ func CompleteHupijiaoSubscriptionOrder(tradeNo string, amount float64, providerP
 	}
 
 	var order SubscriptionOrder
+	var inviterId int
+	var inviteRewardQuota int
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -1332,7 +1335,7 @@ func CompleteHupijiaoSubscriptionOrder(tradeNo string, amount float64, providerP
 		}
 
 		// 获取套餐信息
-		plan, err := GetSubscriptionPlanById(order.PlanId)
+		plan, err := getSubscriptionPlanByIdTx(tx, order.PlanId)
 		if err != nil {
 			return fmt.Errorf("套餐不存在: %w", err)
 		}
@@ -1347,12 +1350,22 @@ func CompleteHupijiaoSubscriptionOrder(tradeNo string, amount float64, providerP
 			return err
 		}
 
+		var rewardErr error
+		inviterId, inviteRewardQuota, rewardErr = applyHupijiaoInviteRewardTx(tx, order.UserId, amount)
+		if rewardErr != nil {
+			return fmt.Errorf("增加邀请奖励失败: %w", rewardErr)
+		}
+
 		return nil
 	})
 
 	if err != nil {
 		common.SysError("hupijiao subscription failed: " + err.Error())
 		return err
+	}
+
+	if inviterId > 0 && inviteRewardQuota > 0 {
+		RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("虎皮椒订阅邀请奖励，来自用户 %d，待转移奖励额度: %v，支付金额: %.2f", order.UserId, logger.FormatQuota(inviteRewardQuota), amount))
 	}
 
 	return nil

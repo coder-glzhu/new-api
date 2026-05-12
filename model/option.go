@@ -128,6 +128,7 @@ func InitOptionMap() {
 	common.OptionMap["HupijiaoPrice"] = strconv.FormatFloat(setting.HupijiaoPrice, 'f', -1, 64)
 	common.OptionMap["HupijiaoAmountOptions"] = setting.HupijiaoAmountOptions
 	common.OptionMap["HupijiaoAmountDiscount"] = setting.HupijiaoAmountDiscount
+	common.OptionMap["HupijiaoInviteRewardRatio"] = strconv.FormatFloat(setting.HupijiaoInviteRewardRatio, 'f', -1, 64)
 	common.OptionMap["TopupUpgradeGroup"] = setting.TopupUpgradeGroup
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
@@ -491,6 +492,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.HupijiaoAmountOptions = value
 	case "HupijiaoAmountDiscount":
 		setting.HupijiaoAmountDiscount = value
+	case "HupijiaoInviteRewardRatio":
+		setting.HupijiaoInviteRewardRatio, _ = strconv.ParseFloat(value, 64)
 	case "TopupUpgradeGroup":
 		setting.TopupUpgradeGroup = strings.TrimSpace(value)
 	case "TopupGroupRatio":

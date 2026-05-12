@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -709,6 +710,55 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	return nil
 }
 
+func calculateHupijiaoInviteRewardQuota(paidCNY float64) int {
+	if paidCNY <= 0 || setting.HupijiaoPrice <= 0 || setting.HupijiaoInviteRewardRatio <= 0 || setting.HupijiaoInviteRewardRatio > 1 || common.QuotaPerUnit <= 0 {
+		return 0
+	}
+	if math.IsNaN(paidCNY) || math.IsInf(paidCNY, 0) ||
+		math.IsNaN(setting.HupijiaoPrice) || math.IsInf(setting.HupijiaoPrice, 0) ||
+		math.IsNaN(setting.HupijiaoInviteRewardRatio) || math.IsInf(setting.HupijiaoInviteRewardRatio, 0) ||
+		math.IsNaN(common.QuotaPerUnit) || math.IsInf(common.QuotaPerUnit, 0) {
+		return 0
+	}
+	dPaidCNY := decimal.NewFromFloat(paidCNY)
+	dRewardRatio := decimal.NewFromFloat(setting.HupijiaoInviteRewardRatio)
+	dHupijiaoPrice := decimal.NewFromFloat(setting.HupijiaoPrice)
+	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	return int(dPaidCNY.Mul(dRewardRatio).Div(dHupijiaoPrice).Mul(dQuotaPerUnit).Round(0).IntPart())
+}
+
+func applyHupijiaoInviteRewardTx(tx *gorm.DB, inviteeId int, paidCNY float64) (int, int, error) {
+	if tx == nil {
+		return 0, 0, errors.New("tx is nil")
+	}
+	rewardQuota := calculateHupijiaoInviteRewardQuota(paidCNY)
+	if rewardQuota <= 0 {
+		return 0, 0, nil
+	}
+
+	var invitee User
+	if err := tx.Select("id", "inviter_id").Where("id = ?", inviteeId).First(&invitee).Error; err != nil {
+		return 0, 0, err
+	}
+	if invitee.InviterId <= 0 {
+		return 0, 0, nil
+	}
+
+	updates := map[string]interface{}{
+		"aff_quota":   gorm.Expr("aff_quota + ?", rewardQuota),
+		"aff_history": gorm.Expr("aff_history + ?", rewardQuota),
+	}
+	result := tx.Model(&User{}).Where("id = ?", invitee.InviterId).Updates(updates)
+	if result.Error != nil {
+		return 0, 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return 0, 0, nil
+	}
+
+	return invitee.InviterId, rewardQuota, nil
+}
+
 // RechargeByHupijiao processes Hupijiao payment callback and increases user quota
 func RechargeByHupijiao(tradeNo string, amount float64) error {
 	if tradeNo == "" {
@@ -717,6 +767,8 @@ func RechargeByHupijiao(tradeNo string, amount float64) error {
 
 	var topUp TopUp
 	var quotaToAdd int
+	var inviterId int
+	var inviteRewardQuota int
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -769,6 +821,12 @@ func RechargeByHupijiao(tradeNo string, amount float64) error {
 			return fmt.Errorf("增加配额失败: %w", err)
 		}
 
+		var rewardErr error
+		inviterId, inviteRewardQuota, rewardErr = applyHupijiaoInviteRewardTx(tx, topUp.UserId, amount)
+		if rewardErr != nil {
+			return fmt.Errorf("增加邀请奖励失败: %w", rewardErr)
+		}
+
 		return nil
 	})
 
@@ -779,6 +837,9 @@ func RechargeByHupijiao(tradeNo string, amount float64) error {
 
 	if quotaToAdd > 0 {
 		RecordTopupLog(topUp.UserId, fmt.Sprintf("虎皮椒充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money), "", topUp.PaymentMethod, PaymentMethodHupijiao)
+		if inviterId > 0 && inviteRewardQuota > 0 {
+			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("虎皮椒邀请奖励，来自用户 %d，待转移奖励额度: %v，支付金额: %.2f", topUp.UserId, logger.FormatQuota(inviteRewardQuota), amount))
+		}
 		UpgradeUserGroupOnTopup(topUp.UserId)
 	}
 
