@@ -229,14 +229,11 @@ func GetTodayActivities() ([]*LuckyBagActivity, error) {
 
 // 抽奖权重参数
 const (
-	luckyBagTicketFloor    = 10  // 每人基础票数，保证新人有真实机会
-	luckyBagTicketMeritCap = 40  // 活跃度加成上限，巨鲸/新人 ≈ 5:1（50 vs 10）
-	luckyBagMeritBonus     = 5.0 // log₂ 系数：每 usage 翻倍增加 5 张票
+	luckyBagTicketFloor    = 10  // 每人基础票数
+	luckyBagTicketMeritCap = 40  // 活跃度加成上限
+	luckyBagMeritBonus     = 5.0 // log₂ 系数
 
-	luckyBagPityStep = 0.2 // 保底加成：每连续 1 场未中奖，权重上浮 20%
-	luckyBagPityCap  = 10  // 保底连击上限
-
-	luckyBagVIPMultiplier     = 1.5 // VIP 用户基础权重倍率
+	luckyBagVIPMultiplier     = 1.5 // VIP 用户权重倍率
 	luckyBagRecentWinLookback = 5   // 连中惩罚回溯场次
 	luckyBagWinPenaltyStep    = 0.5 // 每次近期中奖权重折半
 )
@@ -305,33 +302,6 @@ func calcUserScore(userId int) float64 {
 	return score
 }
 
-// calcUserPityLosses 查询用户最近连续未中奖场次数
-// 从最近一场倒推，遇到中奖（任意名次）即停止计数
-func calcUserPityLosses(userId int) int {
-	type row struct{ Won bool }
-	var rows []row
-	DB.Raw(`
-		SELECT (a.winner_user_id = ? OR a.winner2_user_id = ? OR a.winner3_user_id = ?) AS won
-		FROM lucky_bag_entries e
-		JOIN lucky_bag_activities a ON a.id = e.activity_id
-		WHERE e.user_id = ? AND a.status = ?
-		ORDER BY a.drawn_at DESC
-		LIMIT ?
-	`, userId, userId, userId, userId, LuckyBagStatusDrawn, luckyBagPityCap+1).Scan(&rows)
-
-	losses := 0
-	for _, r := range rows {
-		if r.Won {
-			break
-		}
-		losses++
-	}
-	if losses > luckyBagPityCap {
-		losses = luckyBagPityCap
-	}
-	return losses
-}
-
 // calcUserRecentWins 统计用户在最近 lookback 场已开奖活动中中了几次（任意名次）
 func calcUserRecentWins(userId, lookback int) int {
 	type row struct{ Won bool }
@@ -356,20 +326,18 @@ func calcUserRecentWins(userId, lookback int) int {
 
 // calcUserWeight 计算用户在本场抽奖的权重
 //
-// 维度：
-//  1. 活跃度（累计消耗 > 充值总额 > 累计参与福袋 > 近7天消耗 > 邀请注册 > 累计签到）→ 基础票数 [10, 50]
-//  2. VIP 倍率：group="vip"/"svip" → ×1.5
-//  3. 保底加成：连续未中奖 n 场 → ×(1 + 0.2n)，最多 ×3
-//  4. 连中惩罚：近5场中奖 k 次 → ×0.5^k（连中2次权重降至1/4）
+// 规则：
+//  1. 活跃度 → 基础票数 [10, 50]
+//  2. VIP 倍率 ×1.5
+//  3. 近期中奖惩罚：近5场中奖 k 次 → ×0.5^k
 func calcUserWeight(userId int) int {
 	ctx := context.Background()
 	user, err := GetUserById(userId, true)
 	if err != nil || user == nil {
-		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] calcUserWeight userId=%d: user not found (%v), floor only", userId, err))
+		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] calcUserWeight userId=%d: user not found, floor only", userId))
 		return luckyBagTicketFloor
 	}
 
-	// 1. 活跃度 → 基础票数
 	score := calcUserScore(userId)
 	merit := luckyBagMeritBonus * math.Log2(1+score)
 	if merit < 0 {
@@ -380,28 +348,22 @@ func calcUserWeight(userId int) int {
 	}
 	baseTickets := float64(luckyBagTicketFloor) + merit
 
-	// 2. VIP 倍率
 	vipMult := 1.0
 	if user.Group == "vip" || user.Group == "svip" {
 		vipMult = luckyBagVIPMultiplier
 	}
 
-	// 3. 保底加成
-	losses := calcUserPityLosses(userId)
-	pityMult := 1.0 + luckyBagPityStep*float64(losses)
-
-	// 4. 连中惩罚
 	recentWins := calcUserRecentWins(userId, luckyBagRecentWinLookback)
 	penaltyMult := math.Pow(luckyBagWinPenaltyStep, float64(recentWins))
 
-	finalWeight := int(math.Round(baseTickets * vipMult * pityMult * penaltyMult))
+	finalWeight := int(math.Round(baseTickets * vipMult * penaltyMult))
 	if finalWeight < 1 {
 		finalWeight = 1
 	}
 
 	logger.LogInfo(ctx, fmt.Sprintf(
-		"[LuckyBag] calcUserWeight userId=%d group=%s: score=%.2f base=%.1f ×vip%.1f ×pity(n=%d,×%.2f) ×penalty(wins=%d,×%.2f) = %d",
-		userId, user.Group, score, baseTickets, vipMult, losses, pityMult, recentWins, penaltyMult, finalWeight))
+		"[LuckyBag] calcUserWeight userId=%d group=%s: score=%.2f base=%.1f ×vip%.1f ×penalty(wins=%d,×%.2f) = %d",
+		userId, user.Group, score, baseTickets, vipMult, recentWins, penaltyMult, finalWeight))
 	return finalWeight
 }
 
