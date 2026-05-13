@@ -96,9 +96,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
     abbreviate: false,
   })
   const displayPrice =
-    hasHupijiao && hasNonHupijiaoPayment
+    priceCNY > 0 && hasNonHupijiaoPayment
       ? `支付宝 ${displayPriceCNY} / 其他 $${price}`
-      : hasHupijiao
+      : priceCNY > 0
         ? displayPriceCNY
         : `$${price}`
   const limitReached =

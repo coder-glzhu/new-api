@@ -281,7 +281,7 @@ export function SubscriptionPlansCard({
             const priceCNY = Number(plan.price_cny || 0)
             const price = Number(plan.price_amount || 0).toFixed(2)
             const displayPrice =
-              enableHupijiao && priceCNY > 0
+              priceCNY > 0
                 ? formatCnyCurrencyAmount(priceCNY, {
                     digitsLarge: 2,
                     digitsSmall: 2,
