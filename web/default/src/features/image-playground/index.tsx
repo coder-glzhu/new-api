@@ -26,11 +26,13 @@ function isKeyUsable(key: ApiKey) {
 
 export function ImagePlayground() {
   const { t } = useTranslation()
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [resolvedKey, setResolvedKey] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    const cached = Number(localStorage.getItem(STORAGE_KEY))
+    return cached || null
+  })
   const [iframeUrl, setIframeUrl] = useState<string | null>(null)
   const [loadingKey, setLoadingKey] = useState(false)
-  const prevKeyId = useRef<number | null>(null)
+  const resolvedIdRef = useRef<number | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['image-playground-keys'],
@@ -39,31 +41,26 @@ export function ImagePlayground() {
 
   const usableKeys = (data?.data?.items ?? []).filter(isKeyUsable)
 
-  // On load: restore cached id if still valid, else pick first usable
+  // When keys load: validate cached selection, fall back to first usable key if needed
   useEffect(() => {
     if (!data?.data) return
-    const cached = Number(localStorage.getItem(STORAGE_KEY))
-    const found = cached ? usableKeys.find((k) => k.id === cached) : null
-    const target = found ?? usableKeys[0] ?? null
-    setSelectedId(target?.id ?? null)
+    const stillValid = selectedId && usableKeys.some((k) => k.id === selectedId)
+    if (!stillValid) setSelectedId(usableKeys[0]?.id ?? null)
   }, [data])
 
   // Resolve real key whenever selectedId changes
   useEffect(() => {
-    if (!selectedId || selectedId === prevKeyId.current) return
-    prevKeyId.current = selectedId
-    setResolvedKey(null)
+    if (!selectedId || selectedId === resolvedIdRef.current) return
+    resolvedIdRef.current = selectedId
     setIframeUrl(null)
     setLoadingKey(true)
     fetchTokenKey(selectedId)
       .then((res) => {
         if (res.success && res.data?.key) {
-          const key = `sk-${res.data.key}`
-          setResolvedKey(key)
           localStorage.setItem(STORAGE_KEY, String(selectedId))
           const url = new URL(IMAGE_PLAYGROUND_BASE)
           url.searchParams.set('apiUrl', API_URL)
-          url.searchParams.set('apiKey', key)
+          url.searchParams.set('apiKey', `sk-${res.data.key}`)
           url.searchParams.set('model', MODEL)
           setIframeUrl(url.toString())
         }
@@ -72,9 +69,8 @@ export function ImagePlayground() {
   }, [selectedId])
 
   const handleSelect = (val: string) => {
-    const id = Number(val)
-    prevKeyId.current = null // force re-resolve
-    setSelectedId(id)
+    resolvedIdRef.current = null // force re-resolve on manual change
+    setSelectedId(Number(val))
   }
 
   if (isLoading) {
