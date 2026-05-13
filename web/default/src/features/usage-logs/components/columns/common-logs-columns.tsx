@@ -275,6 +275,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     columns.push(
       {
         id: 'channel',
+        filterFn: () => true, // server-side only; row.getValue('channel') is undefined without an accessor
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Channel')} />
         ),
