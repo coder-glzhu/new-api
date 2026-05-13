@@ -17,6 +17,7 @@ import {
   ListTodo,
   Settings,
   Gift,
+  ImagePlay,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -48,6 +49,11 @@ export function useSidebarData(): SidebarData {
             title: t('Chat'),
             icon: MessageSquare,
             type: 'chat-presets',
+          },
+          {
+            title: t('Image Playground'),
+            url: '/image-playground',
+            icon: ImagePlay,
           },
         ],
       },
