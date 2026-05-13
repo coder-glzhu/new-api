@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ImageIcon, KeyRound, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ImageIcon, KeyRound, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -78,6 +78,12 @@ export function ImagePlaygroundPanel() {
 
   return (
     <div className='flex h-full flex-col'>
+      {/* Warning banner */}
+      <div className='flex items-center gap-2 border-b bg-amber-50 px-4 py-1.5 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'>
+        <AlertTriangle className='h-3.5 w-3.5 shrink-0' />
+        <span className='text-xs'>{t('Do not refresh the page while generating images, or the result will be lost.')}</span>
+      </div>
+
       {/* Toolbar */}
       <div className='flex items-center gap-2 border-b px-4 py-2'>
         <ImageIcon className='text-muted-foreground h-4 w-4 shrink-0' />

@@ -2155,6 +2155,7 @@
     "{{from}}–{{to}} of {{total}}": "第 {{from}}–{{to}} 条，共 {{total}} 条",
     "You": "我",
     "You need an API Key to use Image Playground": "使用画图功能需要先创建一个 API 密钥",
+    "Do not refresh the page while generating images, or the result will be lost.": "生图过程中请勿刷新页面，否则结果将丢失。",
     "Won": "获得",
     "Anonymous": "匿名用户",
     "Activity Rules": "活动规则",
