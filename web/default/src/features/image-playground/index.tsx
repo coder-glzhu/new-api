@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ImageIcon, KeyRound, RefreshCw } from 'lucide-react'
@@ -11,9 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { getApiKeys } from '@/features/keys/api'
-import { fetchTokenKey } from '@/features/keys/api'
+import { getApiKeys, fetchTokenKey } from '@/features/keys/api'
 import type { ApiKey } from '@/features/keys/types'
+import { useImagePlaygroundStore } from './store'
 
 const STORAGE_KEY = 'image_playground_selected_key_id'
 const IMAGE_PLAYGROUND_BASE = 'https://aiproxy.chydocx.cn/image/'
@@ -24,24 +24,25 @@ function isKeyUsable(key: ApiKey) {
   return key.status === 1 && (key.unlimited_quota || key.remain_quota > 0)
 }
 
-export function ImagePlayground() {
+/**
+ * Mounted inside AuthenticatedLayout, always in the DOM.
+ * Hidden via CSS when not on the image-playground route.
+ */
+export function ImagePlaygroundPanel() {
   const { t } = useTranslation()
-  const [selectedId, setSelectedId] = useState<number | null>(() => {
-    const cached = Number(localStorage.getItem(STORAGE_KEY))
-    return cached || null
-  })
-  const [iframeUrl, setIframeUrl] = useState<string | null>(null)
-  const [loadingKey, setLoadingKey] = useState(false)
+  const { visible, iframeUrl, selectedId, loadingKey, setIframeUrl, setSelectedId, setLoadingKey } =
+    useImagePlaygroundStore()
   const resolvedIdRef = useRef<number | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['image-playground-keys'],
     queryFn: () => getApiKeys({ size: 100 }),
+    enabled: visible || selectedId !== null,
   })
 
   const usableKeys = (data?.data?.items ?? []).filter(isKeyUsable)
 
-  // When keys load: validate cached selection, fall back to first usable key if needed
+  // Validate cached selection once keys load
   useEffect(() => {
     if (!data?.data) return
     const stillValid = selectedId && usableKeys.some((k) => k.id === selectedId)
@@ -69,31 +70,11 @@ export function ImagePlayground() {
   }, [selectedId])
 
   const handleSelect = (val: string) => {
-    resolvedIdRef.current = null // force re-resolve on manual change
+    resolvedIdRef.current = null
     setSelectedId(Number(val))
   }
 
-  if (isLoading) {
-    return (
-      <div className='flex h-full items-center justify-center'>
-        <RefreshCw className='text-muted-foreground h-5 w-5 animate-spin' />
-      </div>
-    )
-  }
-
-  if (usableKeys.length === 0) {
-    return (
-      <div className='flex h-full flex-col items-center justify-center gap-4'>
-        <KeyRound className='text-muted-foreground h-10 w-10' />
-        <p className='text-muted-foreground text-sm'>
-          {t('You need an API Key to use Image Playground')}
-        </p>
-        <Button asChild>
-          <Link to='/keys'>{t('Create API Key')}</Link>
-        </Button>
-      </div>
-    )
-  }
+  const showNoKey = !isLoading && usableKeys.length === 0
 
   return (
     <div className='flex h-full flex-col'>
@@ -121,8 +102,18 @@ export function ImagePlayground() {
         )}
       </div>
 
-      {/* iframe */}
-      {iframeUrl ? (
+      {/* Content */}
+      {showNoKey ? (
+        <div className='flex flex-1 flex-col items-center justify-center gap-4'>
+          <KeyRound className='text-muted-foreground h-10 w-10' />
+          <p className='text-muted-foreground text-sm'>
+            {t('You need an API Key to use Image Playground')}
+          </p>
+          <Button asChild>
+            <Link to='/keys'>{t('Create API Key')}</Link>
+          </Button>
+        </div>
+      ) : iframeUrl ? (
         <iframe
           key={iframeUrl}
           src={iframeUrl}
@@ -137,4 +128,23 @@ export function ImagePlayground() {
       )}
     </div>
   )
+}
+
+/**
+ * Route page: just initializes state and marks the panel visible.
+ * The actual iframe lives in ImagePlaygroundPanel above.
+ */
+export function ImagePlayground() {
+  const { setVisible, setSelectedId } = useImagePlaygroundStore()
+
+  useEffect(() => {
+    // Restore cached key on mount
+    const cached = Number(localStorage.getItem(STORAGE_KEY))
+    if (cached) setSelectedId(cached)
+    setVisible(true)
+    return () => setVisible(false)
+  }, [])
+
+  // Render nothing — the panel in layout takes full space when visible
+  return null
 }

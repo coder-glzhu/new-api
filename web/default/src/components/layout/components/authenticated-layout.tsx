@@ -5,6 +5,8 @@ import { SearchProvider } from '@/context/search-provider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
+import { ImagePlaygroundPanel } from '@/features/image-playground'
+import { useImagePlaygroundStore } from '@/features/image-playground/store'
 import { WorkspaceProvider } from '../context/workspace-context'
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
@@ -15,6 +17,7 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  const imagePanelVisible = useImagePlaygroundStore((s) => s.visible)
 
   return (
     <LayoutProvider>
@@ -28,11 +31,18 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
               <SidebarInset
                 className={cn(
                   '@container/content',
+                  'relative',
                   'h-[calc(100svh-var(--app-header-height,0px))]',
                   'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
                 )}
               >
                 {props.children ?? <AnimatedOutlet />}
+                <div
+                  className='absolute inset-0 z-10 bg-background'
+                  style={imagePanelVisible ? undefined : { display: 'none', pointerEvents: 'none' }}
+                >
+                  <ImagePlaygroundPanel />
+                </div>
               </SidebarInset>
             </div>
           </SidebarProvider>
