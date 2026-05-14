@@ -203,6 +203,9 @@ func InitOptionMap() {
 	common.OptionMap["WechatBotReminderContent"] = ""
 	common.OptionMap["WechatBotResultContent"] = ""
 
+	// OpenAI status RSS monitor
+	common.OptionMap["OpenAIStatusMonitorEnabled"] = "false"
+
 	// 福袋开奖时间（逗号分隔的整点小时，0~23）
 	common.OptionMap["LuckyBagDrawHours"] = "9,12,17"
 	// 福袋奖金区间（单位：美元）

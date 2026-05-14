@@ -122,6 +122,9 @@ func main() {
 	// Lucky bag auto-draw task (fires at 12:00 daily)
 	service.StartLuckyBagDrawTask()
 
+	// OpenAI status RSS monitor — notifies WeChat group on upstream incidents
+	service.StartOpenAIStatusMonitor()
+
 	// Wire task polling adaptor factory (breaks service -> relay import cycle)
 	service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor {
 		a := relay.GetTaskAdaptor(platform)
