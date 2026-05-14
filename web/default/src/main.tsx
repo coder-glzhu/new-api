@@ -89,6 +89,39 @@ declare module '@tanstack/react-router' {
   }
 }
 
+// Auto-reload once when a deploy rotates chunk hashes out from under us.
+// Dynamic import() throws TypeError/ChunkLoadError for the missing JS files;
+// the user sees the 500 errorComponent until they manually refresh. Guard
+// with sessionStorage so a genuinely broken build doesn't reload-loop.
+function isChunkLoadError(err: unknown): boolean {
+  if (!err) return false
+  const msg = err instanceof Error ? err.message : String(err)
+  const name = err instanceof Error ? err.name : ''
+  return (
+    name === 'ChunkLoadError' ||
+    /Loading chunk [\w\d-]+ failed/i.test(msg) ||
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg)
+  )
+}
+
+function reloadForStaleChunks() {
+  const key = 'chunk-reload-at'
+  const last = Number(sessionStorage.getItem(key) || 0)
+  // Only reload once per 30s to avoid loops on genuinely broken builds.
+  if (Date.now() - last < 30_000) return
+  sessionStorage.setItem(key, String(Date.now()))
+  window.location.reload()
+}
+
+window.addEventListener('error', (event) => {
+  if (isChunkLoadError(event.error)) reloadForStaleChunks()
+})
+window.addEventListener('unhandledrejection', (event) => {
+  if (isChunkLoadError(event.reason)) reloadForStaleChunks()
+})
+
 // Render the app
 const rootElement = document.getElementById('root')!
 // Set document.title and favicon from cached status, then refresh from network

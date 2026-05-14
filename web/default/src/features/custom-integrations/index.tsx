@@ -25,6 +25,7 @@ const defaultSettings: CustomIntegrationSettings = {
   HupijiaoReturnUrl: '',
   HupijiaoMinTopUp: 1,
   HupijiaoInviteRewardRatio: 0.2,
+  OpenAIStatusMonitorEnabled: false,
 }
 
 export function CustomIntegrationsSettings() {

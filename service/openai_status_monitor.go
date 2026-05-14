@@ -236,54 +236,56 @@ func markOpenAIStatusSeen(fp string) {
 	openAIStatusInMemorySeen[fp] = time.Now()
 }
 
-// buildOpenAIStatusMessage renders a concise WeChat-friendly summary.
+// buildOpenAIStatusMessage renders a 3-line summary for WeChat.
+//
+// Format:
+//
+//	⚠️ OpenAI 故障            (or ✅ OpenAI 恢复)
+//	<title>
+//	🕐 HH:MM · <link>
 func buildOpenAIStatusMessage(it rssItem) string {
 	title := strings.TrimSpace(it.Title)
-	summary := summarizeOpenAIStatusDescription(it.Description)
 	link := strings.TrimSpace(it.Link)
-	pub := strings.TrimSpace(it.PubDate)
+	header := "⚠️ OpenAI 故障"
+	if isOpenAIStatusResolved(it) {
+		header = "✅ OpenAI 恢复"
+	}
 
 	var b strings.Builder
-	b.WriteString("⚠️ OpenAI 服务状态更新\n")
+	b.WriteString(header)
+	b.WriteString("\n")
 	if title != "" {
-		b.WriteString("【")
 		b.WriteString(title)
-		b.WriteString("】\n")
-	}
-	if summary != "" {
-		b.WriteString(summary)
 		b.WriteString("\n")
 	}
-	if pub != "" {
-		b.WriteString("时间：")
-		b.WriteString(pub)
-		b.WriteString("\n")
-	}
+	b.WriteString("🕐 ")
+	b.WriteString(formatOpenAIStatusTime(it.PubDate))
 	if link != "" {
-		b.WriteString("详情：")
+		b.WriteString(" · ")
 		b.WriteString(link)
 	}
 	return b.String()
 }
 
-// summarizeOpenAIStatusDescription strips HTML tags and trims to a short blurb.
-func summarizeOpenAIStatusDescription(desc string) string {
-	s := desc
-	for {
-		open := strings.Index(s, "<")
-		if open == -1 {
-			break
-		}
-		close := strings.Index(s[open:], ">")
-		if close == -1 {
-			break
-		}
-		s = s[:open] + " " + s[open+close+1:]
+// isOpenAIStatusResolved detects resolution-phase entries by keyword.
+func isOpenAIStatusResolved(it rssItem) bool {
+	lower := strings.ToLower(it.Title + " " + it.Description)
+	return strings.Contains(lower, "resolved")
+}
+
+// formatOpenAIStatusTime parses the RSS PubDate and renders HH:MM in local time.
+// Falls back to the raw string if parsing fails.
+func formatOpenAIStatusTime(pubDate string) string {
+	pubDate = strings.TrimSpace(pubDate)
+	if pubDate == "" {
+		return ""
 	}
-	s = strings.Join(strings.Fields(s), " ")
-	const maxLen = 240
-	if len(s) > maxLen {
-		s = s[:maxLen] + "…"
+	t, err := time.Parse(time.RFC1123Z, pubDate)
+	if err != nil {
+		t, err = time.Parse(time.RFC1123, pubDate)
 	}
-	return s
+	if err != nil {
+		return pubDate
+	}
+	return t.Local().Format("15:04")
 }
