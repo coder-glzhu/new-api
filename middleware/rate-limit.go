@@ -18,10 +18,19 @@ var defNext = func(c *gin.Context) {
 	c.Next()
 }
 
+// realClientIP returns the real client IP from X-Real-IP header (set by nginx
+// after resolving upstream proxies), falling back to c.ClientIP().
+func realClientIP(c *gin.Context) string {
+	if ip := c.GetHeader("X-Real-IP"); ip != "" {
+		return ip
+	}
+	return c.ClientIP()
+}
+
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	ctx := context.Background()
 	rdb := common.RDB
-	key := "rateLimit:" + mark + c.ClientIP()
+	key := "rateLimit:" + mark + realClientIP(c)
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
 		fmt.Println(err.Error())
@@ -65,7 +74,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
-	key := mark + c.ClientIP()
+	key := mark + realClientIP(c)
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
 		c.Status(http.StatusTooManyRequests)
 		c.Abort()
