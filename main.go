@@ -163,6 +163,9 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
+	// Trust nginx reverse proxy (Docker bridge + host) so c.ClientIP() returns the real client IP
+	// instead of the nginx container/host IP, which would cause all users to share one rate-limit bucket.
+	_ = server.SetTrustedProxies([]string{"127.0.0.1", "172.16.0.0/12", "10.0.0.0/8", "192.168.0.0/16"})
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		common.SysLog(fmt.Sprintf("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{
