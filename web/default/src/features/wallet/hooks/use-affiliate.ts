@@ -5,6 +5,7 @@ import { getSelf } from '@/lib/api'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { getAffiliateCode, transferAffiliateQuota } from '../api'
 import { generateAffiliateLink } from '../lib'
+import { formatUsdAmount } from '../lib/usd-format'
 
 // ============================================================================
 // Affiliate Hook
@@ -42,26 +43,34 @@ export function useAffiliate() {
   }, [affiliateLink, copyToClipboard])
 
   // Transfer affiliate quota to balance
-  const transferQuota = useCallback(async (quota: number): Promise<boolean> => {
-    try {
-      setTransferring(true)
-      const response = await transferAffiliateQuota({ quota })
+  const transferQuota = useCallback(
+    async (amount: number): Promise<boolean> => {
+      try {
+        setTransferring(true)
+        const response = await transferAffiliateQuota({ amount })
 
-      if (response.success) {
-        toast.success(response.message || i18next.t('Transfer successful'))
-        await getSelf()
-        return true
+        if (response.success) {
+          const transferredAmount = response.data?.amount ?? amount
+          toast.success(
+            i18next.t('Transferred {{amount}} to balance', {
+              amount: formatUsdAmount(transferredAmount),
+            })
+          )
+          await getSelf()
+          return true
+        }
+
+        toast.error(response.message || i18next.t('Transfer failed'))
+        return false
+      } catch (_error) {
+        toast.error(i18next.t('Transfer failed'))
+        return false
+      } finally {
+        setTransferring(false)
       }
-
-      toast.error(response.message || i18next.t('Transfer failed'))
-      return false
-    } catch (_error) {
-      toast.error(i18next.t('Transfer failed'))
-      return false
-    } finally {
-      setTransferring(false)
-    }
-  }, [])
+    },
+    []
+  )
 
   useEffect(() => {
     fetchAffiliateCode()

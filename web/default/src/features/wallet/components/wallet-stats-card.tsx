@@ -1,7 +1,12 @@
 import { Activity, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatQuota } from '@/lib/format'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  formatUsdAmount,
+  quotaToUsdAmount,
+  resolveQuotaPerUsd,
+} from '../lib/usd-format'
 import type { UserWalletData } from '../types'
 
 interface WalletStatsCardProps {
@@ -11,6 +16,10 @@ interface WalletStatsCardProps {
 
 export function WalletStatsCard(props: WalletStatsCardProps) {
   const { t } = useTranslation()
+  const configuredQuotaPerUnit = useSystemConfigStore(
+    (state) => state.config.currency.quotaPerUnit
+  )
+  const quotaPerUnit = resolveQuotaPerUsd(configuredQuotaPerUnit)
 
   if (props.loading) {
     return (
@@ -32,14 +41,18 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
   const stats = [
     {
       label: t('Current Balance'),
-      value: formatQuota(props.user?.quota ?? 0),
+      value: formatUsdAmount(
+        quotaToUsdAmount(props.user?.quota ?? 0, quotaPerUnit)
+      ),
       description: t('Remaining quota'),
       icon: WalletCards,
       accent: true,
     },
     {
       label: t('Total Usage'),
-      value: formatQuota(props.user?.used_quota ?? 0),
+      value: formatUsdAmount(
+        quotaToUsdAmount(props.user?.used_quota ?? 0, quotaPerUnit)
+      ),
       description: t('Total consumed quota'),
       icon: BarChart3,
       accent: false,
@@ -69,7 +82,9 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
           <div className='text-foreground mt-1 font-mono text-2xl font-bold tracking-tight tabular-nums sm:text-3xl'>
             {item.value}
           </div>
-          <div className='text-muted-foreground text-xs'>{item.description}</div>
+          <div className='text-muted-foreground text-xs'>
+            {item.description}
+          </div>
         </div>
       ))}
     </div>

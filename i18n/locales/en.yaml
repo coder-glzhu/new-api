@@ -87,6 +87,8 @@ user.admin_cannot_promote: "Regular administrators cannot promote other users to
 user.original_password_error: "Original password is incorrect"
 user.invite_quota_insufficient: "Invitation quota is insufficient!"
 user.transfer_quota_minimum: "Minimum transfer quota is {{.Min}}!"
+user.transfer_amount_minimum: "Minimum transfer amount is {{.Min}}!"
+user.transfer_amount_field_required: "Submit the USD amount with the amount field; the quota field is no longer accepted"
 user.transfer_success: "Transfer successful"
 user.transfer_failed: "Transfer failed {{.Error}}"
 user.topup_processing: "Top-up is processing, please try again later"

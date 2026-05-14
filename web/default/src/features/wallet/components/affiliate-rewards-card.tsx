@@ -1,10 +1,16 @@
 import { Share2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatQuota } from '@/lib/format'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CopyButton } from '@/components/copy-button'
+import {
+  formatUsdAmount,
+  quotaToTransferableUsdAmount,
+  quotaToUsdAmount,
+  resolveQuotaPerUsd,
+} from '../lib/usd-format'
 import type { UserWalletData } from '../types'
 
 interface AffiliateRewardsCardProps {
@@ -21,6 +27,10 @@ export function AffiliateRewardsCard({
   loading,
 }: AffiliateRewardsCardProps) {
   const { t } = useTranslation()
+  const configuredQuotaPerUnit = useSystemConfigStore(
+    (state) => state.config.currency.quotaPerUnit
+  )
+  const quotaPerUnit = resolveQuotaPerUsd(configuredQuotaPerUnit)
 
   if (loading) {
     return (
@@ -39,11 +49,23 @@ export function AffiliateRewardsCard({
     )
   }
 
-  const hasRewards = (user?.aff_quota ?? 0) > 0
+  const transferableAmount = quotaToTransferableUsdAmount(
+    user?.aff_quota ?? 0,
+    quotaPerUnit
+  )
+  const hasRewards = transferableAmount >= 1
 
   const stats = [
-    { label: t('Pending'), value: formatQuota(user?.aff_quota ?? 0) },
-    { label: t('Total Earned'), value: formatQuota(user?.aff_history_quota ?? 0) },
+    {
+      label: t('Pending'),
+      value: formatUsdAmount(transferableAmount),
+    },
+    {
+      label: t('Total Earned'),
+      value: formatUsdAmount(
+        quotaToUsdAmount(user?.aff_history_quota ?? 0, quotaPerUnit)
+      ),
+    },
     { label: t('Invites'), value: String(user?.aff_count ?? 0) },
   ]
 

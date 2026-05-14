@@ -1753,7 +1753,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "强制返回语法合法的 JSON",
@@ -4560,6 +4560,8 @@
     "Minimum prize must be a positive number": "最小奖金必须是正数",
     "Maximum prize must be greater than or equal to minimum": "最大奖金必须大于等于最小奖金",
     "Saved": "已保存",
-    "Drawing...": "开奖中..."
+    "Drawing...": "开奖中...",
+    "Transfer Amount (USD)": "转移金额（美元）",
+    "Transferred {{amount}} to balance": "已转移 {{amount}} 到余额"
   }
 }
