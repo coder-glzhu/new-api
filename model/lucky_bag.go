@@ -97,18 +97,18 @@ const (
 
 // LuckyBagActivity 每天每场一条活动记录（三名获奖者）
 type LuckyBagActivity struct {
-	Id               int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	DrawDate         string `json:"draw_date" gorm:"type:varchar(10);uniqueIndex:idx_lucky_bag_date_slot_v2"`     // YYYY-MM-DD
-	SlotHour         int    `json:"slot_hour" gorm:"not null;uniqueIndex:idx_lucky_bag_date_slot_v2"`             // 0~23
-	SlotMinute       int    `json:"slot_minute" gorm:"not null;default:0;uniqueIndex:idx_lucky_bag_date_slot_v2"` // 0~59
-	MinQuota         int    `json:"min_quota" gorm:"not null;default:500000"`                                     // 默认 $1
-	MaxQuota         int    `json:"max_quota" gorm:"not null;default:5000000"`                                    // 默认 $10
-	Status           string `json:"status" gorm:"type:varchar(20);default:'pending'"`                             // pending / locked / drawn
+	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	DrawDate   string `json:"draw_date" gorm:"type:varchar(10);uniqueIndex:idx_lucky_bag_date_slot_v2"`     // YYYY-MM-DD
+	SlotHour   int    `json:"slot_hour" gorm:"not null;uniqueIndex:idx_lucky_bag_date_slot_v2"`             // 0~23
+	SlotMinute int    `json:"slot_minute" gorm:"not null;default:0;uniqueIndex:idx_lucky_bag_date_slot_v2"` // 0~59
+	MinQuota   int    `json:"min_quota" gorm:"not null;default:500000"`                                     // 默认 $1
+	MaxQuota   int    `json:"max_quota" gorm:"not null;default:5000000"`                                    // 默认 $10
+	Status     string `json:"status" gorm:"type:varchar(20);default:'pending'"`                             // pending / locked / drawn
 	// 第1名（奖金最高）
-	WinnerUserId  int    `json:"winner_user_id" gorm:"default:0"`
-	WinnerName    string `json:"winner_name" gorm:"type:varchar(100)"`
-	WinnerQuota   int    `json:"winner_quota" gorm:"default:0"`
-	WinnerCode    string `json:"winner_code" gorm:"type:varchar(64)"`
+	WinnerUserId int    `json:"winner_user_id" gorm:"default:0"`
+	WinnerName   string `json:"winner_name" gorm:"type:varchar(100)"`
+	WinnerQuota  int    `json:"winner_quota" gorm:"default:0"`
+	WinnerCode   string `json:"winner_code" gorm:"type:varchar(64)"`
 	// 第2名
 	Winner2UserId int    `json:"winner2_user_id" gorm:"default:0"`
 	Winner2Name   string `json:"winner2_name" gorm:"type:varchar(100)"`
@@ -233,13 +233,11 @@ const (
 	luckyBagTicketMeritCap = 40  // 活跃度加成上限
 	luckyBagMeritBonus     = 5.0 // log₂ 系数
 
-	luckyBagVIPMultiplier     = 1.5 // VIP 用户权重倍率
-	luckyBagRecentWinLookback = 5   // 连中惩罚回溯场次
-	luckyBagWinPenaltyStep    = 0.5 // 每次近期中奖权重折半
 )
 
 // calcUserScore 汇总用户活跃度得分
-// 优先级：累计消耗 > 充值总额 > 累计参与福袋 > 近7天消耗 > 邀请注册 > 累计签到
+// 优先级：累计消耗(1.0) > 推荐注册(0.4) > 参与福袋次数(0.25) > 签到次数(0.1)
+// 附加：近7天消耗(0.3，激励近期活跃)，充值总额(0.15，小额付费加成)
 func calcUserScore(userId int) float64 {
 	now := time.Now()
 	weekAgoTs := now.AddDate(0, 0, -7).Unix()
@@ -253,7 +251,14 @@ func calcUserScore(userId int) float64 {
 		Where("user_id = ? AND type = 2", userId).
 		Scan(&totalQuotaRow)
 
-	// 2. 充值总额（top_ups success + subscription_orders success，单位 money 元）
+	// 2. 近7天消耗 token
+	var weekQuotaRow sumRow
+	DB.Model(&Log{}).
+		Select("COALESCE(SUM(quota), 0) AS total").
+		Where("user_id = ? AND created_at >= ? AND type = 2", userId, weekAgoTs).
+		Scan(&weekQuotaRow)
+
+	// 3. 充值总额（top_ups success + subscription_orders success）
 	var topUpRow sumRow
 	DB.Model(&TopUp{}).
 		Select("COALESCE(SUM(amount), 0) AS total").
@@ -261,29 +266,22 @@ func calcUserScore(userId int) float64 {
 		Scan(&topUpRow)
 	var subOrderRow sumRow
 	DB.Model(&SubscriptionOrder{}).
-		Select("COALESCE(SUM(money * 10000), 0) AS total"). // money 转为与 amount 同单位（quota）
+		Select("COALESCE(SUM(money * 10000), 0) AS total").
 		Where("user_id = ? AND status = 'success'", userId).
 		Scan(&subOrderRow)
 	totalRecharge := topUpRow.Total + subOrderRow.Total
 
-	// 3. 累计参与福袋次数
-	var luckyBagEntries int64
-	DB.Model(&LuckyBagEntry{}).
-		Where("user_id = ?", userId).
-		Count(&luckyBagEntries)
-
-	// 4. 近7天消耗 token
-	var weekQuotaRow sumRow
-	DB.Model(&Log{}).
-		Select("COALESCE(SUM(quota), 0) AS total").
-		Where("user_id = ? AND created_at >= ? AND type = 2", userId, weekAgoTs).
-		Scan(&weekQuotaRow)
-
-	// 5. 邀请注册人数（累计）
+	// 4. 邀请注册人数（累计）
 	var inviteCount int64
 	DB.Model(&User{}).
 		Where("inviter_id = ?", userId).
 		Count(&inviteCount)
+
+	// 5. 累计参与福袋次数
+	var luckyBagEntries int64
+	DB.Model(&LuckyBagEntry{}).
+		Where("user_id = ?", userId).
+		Count(&luckyBagEntries)
 
 	// 6. 累计签到次数
 	var checkinCount int64
@@ -292,51 +290,23 @@ func calcUserScore(userId int) float64 {
 		Count(&checkinCount)
 
 	// 得分公式：log 压缩防止巨鲸碾压，系数体现优先级梯度
-	score := 1.0*math.Log2(1+float64(totalQuotaRow.Total)/10000) + // 累计消耗（基准1.0）
-		0.7*math.Log2(1+float64(totalRecharge)/10000) + // 充值总额
-		0.5*math.Log2(1+float64(luckyBagEntries)) + // 累计参与福袋
-		0.4*math.Log2(1+float64(weekQuotaRow.Total)/10000) + // 近7天消耗
-		0.25*math.Log2(1+float64(inviteCount)*5) + // 邀请注册
-		0.1*math.Log2(1+float64(checkinCount)) // 累计签到
+	score := 1.00*math.Log2(1+float64(totalQuotaRow.Total)/10000) + // 累计消耗（最高权重）
+		0.30*math.Log2(1+float64(weekQuotaRow.Total)/10000) + // 近7天消耗（激励近期活跃）
+		0.15*math.Log2(1+float64(totalRecharge)/10000) + // 充值总额（小额付费加成）
+		0.40*math.Log2(1+float64(inviteCount)*5) + // 推荐注册
+		0.25*math.Log2(1+float64(luckyBagEntries)) + // 参与福袋次数
+		0.10*math.Log2(1+float64(checkinCount)) // 签到次数
 
 	return score
-}
-
-// calcUserRecentWins 统计用户在最近 lookback 场已开奖活动中中了几次（任意名次）
-func calcUserRecentWins(userId, lookback int) int {
-	type row struct{ Won bool }
-	var rows []row
-	DB.Raw(`
-		SELECT (a.winner_user_id = ? OR a.winner2_user_id = ? OR a.winner3_user_id = ?) AS won
-		FROM lucky_bag_entries e
-		JOIN lucky_bag_activities a ON a.id = e.activity_id
-		WHERE e.user_id = ? AND a.status = ?
-		ORDER BY a.drawn_at DESC
-		LIMIT ?
-	`, userId, userId, userId, userId, LuckyBagStatusDrawn, lookback).Scan(&rows)
-
-	wins := 0
-	for _, r := range rows {
-		if r.Won {
-			wins++
-		}
-	}
-	return wins
 }
 
 // calcUserWeight 计算用户在本场抽奖的权重
 //
 // 规则：
-//  1. 活跃度 → 基础票数 [10, 50]
-//  2. VIP 倍率 ×1.5
-//  3. 近期中奖惩罚：近5场中奖 k 次 → ×0.5^k
+//  1. 活跃度得分 → 基础票数 [10, 50]，VIP 无额外倍率
+//  2. 48h内中奖者在 pickWinnerAndPersist 中已硬排除，此处不做惩罚折扣
 func calcUserWeight(userId int) int {
 	ctx := context.Background()
-	user, err := GetUserById(userId, true)
-	if err != nil || user == nil {
-		logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] calcUserWeight userId=%d: user not found, floor only", userId))
-		return luckyBagTicketFloor
-	}
 
 	score := calcUserScore(userId)
 	merit := luckyBagMeritBonus * math.Log2(1+score)
@@ -346,24 +316,14 @@ func calcUserWeight(userId int) int {
 	if merit > float64(luckyBagTicketMeritCap) {
 		merit = float64(luckyBagTicketMeritCap)
 	}
-	baseTickets := float64(luckyBagTicketFloor) + merit
-
-	vipMult := 1.0
-	if user.Group == "vip" || user.Group == "svip" {
-		vipMult = luckyBagVIPMultiplier
-	}
-
-	recentWins := calcUserRecentWins(userId, luckyBagRecentWinLookback)
-	penaltyMult := math.Pow(luckyBagWinPenaltyStep, float64(recentWins))
-
-	finalWeight := int(math.Round(baseTickets * vipMult * penaltyMult))
+	finalWeight := int(math.Round(float64(luckyBagTicketFloor) + merit))
 	if finalWeight < 1 {
 		finalWeight = 1
 	}
 
 	logger.LogInfo(ctx, fmt.Sprintf(
-		"[LuckyBag] calcUserWeight userId=%d group=%s: score=%.2f base=%.1f ×vip%.1f ×penalty(wins=%d,×%.2f) = %d",
-		userId, user.Group, score, baseTickets, vipMult, recentWins, penaltyMult, finalWeight))
+		"[LuckyBag] calcUserWeight userId=%d: score=%.2f merit=%.1f weight=%d",
+		userId, score, merit, finalWeight))
 	return finalWeight
 }
 
@@ -516,17 +476,26 @@ func calcWinnerQuota(minQ, maxQ int) int {
 	return minQ + rand.Intn(maxQ-minQ+1)
 }
 
+// luckyBagDrawWeight 将展示/报名权重转换为开奖票数。
+// 使用平方放大高权重优势，避免大池子里高活跃/VIP 用户长期陪跑。
+func luckyBagDrawWeight(weight int) int64 {
+	if weight < 1 {
+		weight = 1
+	}
+	return int64(weight) * int64(weight)
+}
+
 // weightedPick 加权随机选一名获奖者，返回 entry 下标，并从 pool 中移除（修改 pool slice）
 func weightedPick(pool []LuckyBagEntry) (LuckyBagEntry, []LuckyBagEntry) {
-	total := 0
+	var total int64
 	for _, e := range pool {
-		total += e.Weight
+		total += luckyBagDrawWeight(e.Weight)
 	}
-	pick := rand.Intn(total)
-	cum := 0
+	pick := rand.Int63n(total)
+	var cum int64
 	idx := 0
 	for i, e := range pool {
-		cum += e.Weight
+		cum += luckyBagDrawWeight(e.Weight)
 		if pick < cum {
 			idx = i
 			break
@@ -556,7 +525,6 @@ func isRecentWinner(userId int) bool {
 		Limit(1).Count(&count)
 	return count > 0
 }
-
 
 // createRedemptionCode 创建一个兑换码并返回 key
 func createRedemptionCode(activity *LuckyBagActivity, rank int, quota int) (string, error) {
@@ -618,17 +586,8 @@ func pickWinnerAndPersist(activity *LuckyBagActivity, entries []LuckyBagEntry, t
 		code   string
 	}
 
-	// 缓存 VIP / 近48h中奖状态，避免重复查库
-	vipCache    := make(map[int]bool)
+	// 排除48h内已中奖者
 	recentCache := make(map[int]bool)
-	isVIP := func(uid int) bool {
-		if v, ok := vipCache[uid]; ok {
-			return v
-		}
-		v := isVIPUser(uid)
-		vipCache[uid] = v
-		return v
-	}
 	isRecent := func(uid int) bool {
 		if v, ok := recentCache[uid]; ok {
 			return v
@@ -638,30 +597,33 @@ func pickWinnerAndPersist(activity *LuckyBagActivity, entries []LuckyBagEntry, t
 		return v
 	}
 
-	// 排除48h内已中奖者，对非VIP权重×0.5
 	pool := make([]LuckyBagEntry, 0, len(entries))
 	for _, e := range entries {
 		if isRecent(e.UserId) {
 			logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] exclude recent winner userId=%d", e.UserId))
 			continue
 		}
-		entry := e
-		if !isVIP(e.UserId) {
-			entry.Weight = entry.Weight / 2
-			if entry.Weight < 1 {
-				entry.Weight = 1
-			}
-		}
-		pool = append(pool, entry)
+		pool = append(pool, e)
 	}
-	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] eligible pool size=%d (after recent-winner exclusion & non-VIP penalty)", len(pool)))
+	logger.LogInfo(ctx, fmt.Sprintf("[LuckyBag] eligible pool size=%d (after 48h recent-winner exclusion)", len(pool)))
+
+	// 缓存 VIP 状态（仅用于第1名资格判断）
+	vipCache := make(map[int]bool)
+	isVIP := func(uid int) bool {
+		if v, ok := vipCache[uid]; ok {
+			return v
+		}
+		v := isVIPUser(uid)
+		vipCache[uid] = v
+		return v
+	}
 
 	pickOne := func(quotaVal int, rank int) (*winnerInfo, []LuckyBagEntry) {
 		if len(pool) == 0 {
 			return nil, pool
 		}
 
-		// 第1名只能是VIP，从VIP子池里加权随机
+		// 第1名只能是VIP（资格限制，无权重加成）
 		if rank == 1 {
 			var vipPool []LuckyBagEntry
 			for _, e := range pool {
@@ -692,25 +654,18 @@ func pickWinnerAndPersist(activity *LuckyBagActivity, entries []LuckyBagEntry, t
 			return &winnerInfo{userId: candidate.UserId, name: name, quota: quotaVal, code: code}, remaining
 		}
 
-		// 第2/3名：全池加权随机；非VIP中奖额度上限压至区间中点
+		// 第2/3名：全池加权随机，额度不做VIP/非VIP区分
 		candidate, remaining := weightedPick(pool)
-		actualQuota := quotaVal
-		if !isVIP(candidate.UserId) {
-			midPoint := (minQ + maxQ) / 2
-			if actualQuota > midPoint {
-				actualQuota = calcWinnerQuota(minQ, midPoint)
-			}
-		}
 		name := ""
 		if u, _ := GetUserById(candidate.UserId, false); u != nil {
 			name = formatLuckyBagWinnerName(candidate.UserId, u.Username)
 		}
-		code, err := createRedemptionCode(activity, rank, actualQuota)
+		code, err := createRedemptionCode(activity, rank, quotaVal)
 		if err != nil {
 			logger.LogWarn(ctx, fmt.Sprintf("[LuckyBag] pickWinnerAndPersist: create code failed userId=%d: %v", candidate.UserId, err))
 			return nil, remaining
 		}
-		return &winnerInfo{userId: candidate.UserId, name: name, quota: actualQuota, code: code}, remaining
+		return &winnerInfo{userId: candidate.UserId, name: name, quota: quotaVal, code: code}, remaining
 	}
 
 	w1, r1 := pickOne(quota1, 1)
@@ -1064,4 +1019,3 @@ func UpdateLuckyBagActivityConfig(activityId, minQuota, maxQuota int) error {
 			"max_quota": maxQuota,
 		}).Error
 }
-
