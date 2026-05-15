@@ -1,5 +1,5 @@
 import { SectionPageLayout } from '@/components/layout'
-import { BillingHistoryList } from '@/features/wallet/components/billing-history-list'
+import { BillingHistoryList } from './components/billing-history-list'
 
 export function Orders() {
   return (

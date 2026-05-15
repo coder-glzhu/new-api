@@ -44,6 +44,7 @@ import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
 import { Route as AuthenticatedOrdersIndexRouteImport } from './routes/_authenticated/orders/index'
+import { Route as AuthenticatedMyWalletIndexRouteImport } from './routes/_authenticated/my-wallet/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedLuckyBagIndexRouteImport } from './routes/_authenticated/lucky-bag/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
@@ -255,6 +256,12 @@ const AuthenticatedOrdersIndexRoute =
     path: '/orders/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedMyWalletIndexRoute =
+  AuthenticatedMyWalletIndexRouteImport.update({
+    id: '/my-wallet/',
+    path: '/my-wallet/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedModelsIndexRoute =
   AuthenticatedModelsIndexRouteImport.update({
     id: '/models/',
@@ -457,6 +464,7 @@ export interface FileRoutesByFullPath {
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/lucky-bag/': typeof AuthenticatedLuckyBagIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
+  '/my-wallet/': typeof AuthenticatedMyWalletIndexRoute
   '/orders/': typeof AuthenticatedOrdersIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
@@ -519,6 +527,7 @@ export interface FileRoutesByTo {
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/lucky-bag': typeof AuthenticatedLuckyBagIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
+  '/my-wallet': typeof AuthenticatedMyWalletIndexRoute
   '/orders': typeof AuthenticatedOrdersIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
@@ -585,6 +594,7 @@ export interface FileRoutesById {
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/lucky-bag/': typeof AuthenticatedLuckyBagIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
+  '/_authenticated/my-wallet/': typeof AuthenticatedMyWalletIndexRoute
   '/_authenticated/orders/': typeof AuthenticatedOrdersIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
@@ -650,6 +660,7 @@ export interface FileRouteTypes {
     | '/keys/'
     | '/lucky-bag/'
     | '/models/'
+    | '/my-wallet/'
     | '/orders/'
     | '/playground/'
     | '/profile/'
@@ -712,6 +723,7 @@ export interface FileRouteTypes {
     | '/keys'
     | '/lucky-bag'
     | '/models'
+    | '/my-wallet'
     | '/orders'
     | '/playground'
     | '/profile'
@@ -777,6 +789,7 @@ export interface FileRouteTypes {
     | '/_authenticated/keys/'
     | '/_authenticated/lucky-bag/'
     | '/_authenticated/models/'
+    | '/_authenticated/my-wallet/'
     | '/_authenticated/orders/'
     | '/_authenticated/playground/'
     | '/_authenticated/profile/'
@@ -1071,6 +1084,13 @@ declare module '@tanstack/react-router' {
       path: '/orders'
       fullPath: '/orders/'
       preLoaderRoute: typeof AuthenticatedOrdersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/my-wallet/': {
+      id: '/_authenticated/my-wallet/'
+      path: '/my-wallet'
+      fullPath: '/my-wallet/'
+      preLoaderRoute: typeof AuthenticatedMyWalletIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/models/': {
@@ -1373,6 +1393,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedLuckyBagIndexRoute: typeof AuthenticatedLuckyBagIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
+  AuthenticatedMyWalletIndexRoute: typeof AuthenticatedMyWalletIndexRoute
   AuthenticatedOrdersIndexRoute: typeof AuthenticatedOrdersIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
@@ -1399,6 +1420,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedLuckyBagIndexRoute: AuthenticatedLuckyBagIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
+  AuthenticatedMyWalletIndexRoute: AuthenticatedMyWalletIndexRoute,
   AuthenticatedOrdersIndexRoute: AuthenticatedOrdersIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
