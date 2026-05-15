@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatCnyCurrencyAmount } from '@/lib/currency'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -223,6 +224,7 @@ export function AvailablePlansCard({
             if (!plan) return null
             const totalAmount = Number(plan.total_amount || 0)
             const price = Number(plan.price_amount || 0).toFixed(2)
+            const priceCny = Number(plan.price_cny || 0)
             const isPopular = index === 0 && plans.length > 1
             const limit = Number(plan.max_purchase_per_user || 0)
             const count = planPurchaseCountMap.get(plan.id) || 0
@@ -236,6 +238,7 @@ export function AvailablePlansCard({
             const purchasable = isSaleable && !reached && hupijiaoEnabled
             const endingSoon = sale.status === 'live' && sale.endsIn > 0 && sale.endsIn < 7 * 86400
 
+            const priceLabel = formatCnyCurrencyAmount(priceCny)
             const buttonLabel = reached
               ? t('Limit Reached')
               : sale.status === 'upcoming'
@@ -244,7 +247,7 @@ export function AvailablePlansCard({
                   ? t('Sale Ended')
                   : !hupijiaoEnabled
                     ? t('Online payment disabled by admin')
-                    : t('Subscribe Now')
+                    : `${t('Subscribe Now')} · ${priceLabel}`
 
             return (
               <div
@@ -264,11 +267,11 @@ export function AvailablePlansCard({
                 <div className='flex flex-col gap-2 p-4 pb-3'>
                   <div className='flex items-start justify-between gap-2'>
                     <div className='min-w-0 flex-1'>
-                      <h4 className='truncate text-base font-semibold tracking-tight'>
+                      <h4 className='text-base font-semibold tracking-tight'>
                         {plan.title || t('Subscription Plans')}
                       </h4>
                       {plan.subtitle ? (
-                        <p className='text-muted-foreground line-clamp-1 text-xs'>
+                        <p className='text-muted-foreground line-clamp-3 text-xs'>
                           {plan.subtitle}
                         </p>
                       ) : null}
