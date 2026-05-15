@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useSystemConfigStore } from '@/stores/system-config-store'
+import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,13 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  floorUsdToCents,
-  formatUsdAmount,
-  MIN_TRANSFER_AMOUNT_USD,
-  quotaToTransferableUsdAmount,
-  resolveQuotaPerUsd,
-} from '../../lib/usd-format'
+import { QUOTA_PER_DOLLAR } from '../../constants'
 
 interface TransferDialogProps {
   open: boolean
@@ -55,42 +49,20 @@ export function TransferDialog({
   transferring,
 }: TransferDialogProps) {
   const { t } = useTranslation()
-  const configuredQuotaPerUnit = useSystemConfigStore(
-    (state) => state.config.currency.quotaPerUnit
-  )
-  const quotaPerUnit = resolveQuotaPerUsd(configuredQuotaPerUnit)
-  const [amountInput, setAmountInput] = useState('1.00')
-  const amount = Number(amountInput)
-  const normalizedAmount = floorUsdToCents(amount)
-  const availableAmount = quotaToTransferableUsdAmount(
-    availableQuota,
-    quotaPerUnit
-  )
-  const canTransfer =
-    !transferring &&
-    Number.isFinite(normalizedAmount) &&
-    normalizedAmount >= MIN_TRANSFER_AMOUNT_USD &&
-    normalizedAmount <= availableAmount
+  const [amount, setAmount] = useState(QUOTA_PER_DOLLAR)
 
   useEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAmountInput(MIN_TRANSFER_AMOUNT_USD.toFixed(2))
+      setAmount(QUOTA_PER_DOLLAR)
     }
   }, [open])
 
   const handleConfirm = async () => {
-    if (!canTransfer) return
-    setAmountInput(normalizedAmount.toFixed(2))
-    const success = await onConfirm(normalizedAmount)
+    const success = await onConfirm(amount)
     if (success) {
       onOpenChange(false)
     }
-  }
-
-  const handleAmountBlur = () => {
-    if (!Number.isFinite(normalizedAmount)) return
-    setAmountInput(normalizedAmount.toFixed(2))
   }
 
   return (
@@ -111,7 +83,7 @@ export function TransferDialog({
               {t('Available Rewards')}
             </Label>
             <div className='text-2xl font-semibold'>
-              {formatUsdAmount(availableAmount)}
+              {formatQuota(availableQuota)}
             </div>
           </div>
 
@@ -120,22 +92,20 @@ export function TransferDialog({
               htmlFor='transfer-amount'
               className='text-muted-foreground text-xs font-medium tracking-wider uppercase'
             >
-              {t('Transfer Amount (USD)')}
+              {t('Transfer Amount')}
             </Label>
             <Input
               id='transfer-amount'
               type='number'
-              value={amountInput}
-              onChange={(e) => setAmountInput(e.target.value)}
-              onBlur={handleAmountBlur}
-              min={MIN_TRANSFER_AMOUNT_USD}
-              max={availableAmount}
-              step='0.01'
-              inputMode='decimal'
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              min={QUOTA_PER_DOLLAR}
+              max={availableQuota}
+              step={QUOTA_PER_DOLLAR}
               className='font-mono text-lg'
             />
             <p className='text-muted-foreground text-xs'>
-              {t('Minimum:')} {formatUsdAmount(MIN_TRANSFER_AMOUNT_USD)}
+              {t('Minimum:')} {formatQuota(QUOTA_PER_DOLLAR)}
             </p>
           </div>
         </div>
@@ -148,7 +118,7 @@ export function TransferDialog({
           >
             {t('Cancel')}
           </Button>
-          <Button onClick={handleConfirm} disabled={!canTransfer}>
+          <Button onClick={handleConfirm} disabled={transferring}>
             {transferring && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
             {t('Transfer')}
           </Button>

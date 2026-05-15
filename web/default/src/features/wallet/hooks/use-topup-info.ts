@@ -70,20 +70,13 @@ function parsePaymentMethods(
         name: typeof item.name === 'string' ? item.name : '',
         type,
         color: typeof item.color === 'string' ? item.color : undefined,
-        icon: typeof item.icon === 'string' ? item.icon : undefined,
         min_topup:
           type === 'stripe' && normalizedMinTopup <= 0
             ? stripeMinTopup
             : normalizedMinTopup,
       }
     })
-    .filter(
-      (item) =>
-        item.name &&
-        item.type &&
-        item.type !== 'waffo' &&
-        item.type !== 'hupijiao'
-    )
+    .filter((item) => item.name && item.type && item.type !== 'waffo')
 }
 
 function parseWaffoPayMethods(data: unknown): WaffoPayMethod[] {
@@ -185,23 +178,14 @@ export function useTopupInfo() {
         return
       }
 
-      const payMethods = parsePaymentMethods(
-        response.data.pay_methods,
-        response.data.stripe_min_topup
-      )
-
       const processedData: TopupInfo = {
         ...response.data,
-        pay_methods: payMethods,
+        pay_methods: parsePaymentMethods(
+          response.data.pay_methods,
+          response.data.stripe_min_topup
+        ),
         amount_options: parseAmountOptions(response.data.amount_options),
         discount: parseDiscountMap(response.data.discount),
-        hupijiao_price: Number(response.data.hupijiao_price) || 0,
-        hupijiao_min_recharge_amount:
-          Number(response.data.hupijiao_min_recharge_amount) || 0,
-        hupijiao_amount_options: parseAmountOptions(
-          response.data.hupijiao_amount_options
-        ),
-        hupijiao_discount: parseDiscountMap(response.data.hupijiao_discount),
         creem_products: parseCreemProducts(response.data.creem_products),
         waffo_pay_methods: parseWaffoPayMethods(
           response.data.waffo_pay_methods
