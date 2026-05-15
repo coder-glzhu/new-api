@@ -16,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/gin-gonic/gin"
@@ -25,12 +24,19 @@ import (
 )
 
 func GetTopUpInfo(c *gin.Context) {
+	complianceConfirmed := operation_setting.IsPaymentComplianceConfirmed()
+
 	// 克隆支付方式，避免修改全局 PayMethods；虎皮椒会调整支付宝 min_topup（数量为充值档位，非人民币）。
-	payMethods := clonePayMethodsForTopup(operation_setting.PayMethods)
+	var payMethods []map[string]string
+	if !complianceConfirmed {
+		payMethods = []map[string]string{}
+	} else {
+		payMethods = clonePayMethodsForTopup(operation_setting.PayMethods)
+	}
 
 	enableHupijiao := isHupijiaoTopUpEnabled()
 	var minHupijiaoRechargeQty int64
-	if enableHupijiao {
+	if enableHupijiao && complianceConfirmed {
 		minHupijiaoRechargeQty = computeMinHupijiaoRechargeAmount()
 		minHupStr := formatHupijiaoMinQuotaFromCents(minHupijiaoRechargeQty)
 		for i := range payMethods {
@@ -126,12 +132,15 @@ func GetTopUpInfo(c *gin.Context) {
 	}
 
 	data := gin.H{
-		"enable_online_topup":        isEpayTopUpEnabled(),
-		"enable_stripe_topup":        isStripeTopUpEnabled(),
-		"enable_creem_topup":         isCreemTopUpEnabled(),
-		"enable_waffo_topup":         enableWaffo,
-		"enable_waffo_pancake_topup": enableWaffoPancake,
-		"enable_hupijiao_topup":      enableHupijiao,
+		"enable_online_topup":              isEpayTopUpEnabled(),
+		"enable_stripe_topup":              isStripeTopUpEnabled(),
+		"enable_creem_topup":               isCreemTopUpEnabled(),
+		"enable_waffo_topup":               enableWaffo,
+		"enable_waffo_pancake_topup":       enableWaffoPancake,
+		"enable_hupijiao_topup":            enableHupijiao,
+		"enable_redemption":                complianceConfirmed,
+		"payment_compliance_confirmed":     complianceConfirmed,
+		"payment_compliance_terms_version": operation_setting.CurrentComplianceTermsVersion,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
@@ -343,7 +352,7 @@ func RequestEpay(c *gin.Context) {
 	}
 
 	callBackAddress := service.GetCallbackAddress()
-	returnUrl, _ := url.Parse(system_setting.ServerAddress + "/console/log")
+	returnUrl, _ := url.Parse(paymentReturnPath("/console/log"))
 	notifyUrl, _ := url.Parse(callBackAddress + "/api/user/epay/notify")
 	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
 	tradeNo = fmt.Sprintf("USR%dNO%s", id, tradeNo)
