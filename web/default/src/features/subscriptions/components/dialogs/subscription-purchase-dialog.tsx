@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect } from 'react'
 import { Crown, CalendarClock, Package } from 'lucide-react'
+import { SiAlipay } from 'react-icons/si'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatCnyCurrencyAmount } from '@/lib/currency'
@@ -346,10 +347,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     {hasHupijiao && (
                       <Button
                         variant='outline'
-                        className='flex-1'
+                        className='flex-1 gap-2'
                         onClick={handlePayHupijiao}
                         disabled={paying || limitReached}
                       >
+                        <SiAlipay
+                          className='h-4 w-4'
+                          style={{ color: '#1677FF' }}
+                        />
                         {props.hupijiaoPaymentMethodName || t('Alipay')}
                       </Button>
                     )}

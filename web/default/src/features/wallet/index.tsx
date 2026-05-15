@@ -18,27 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { getSelf } from '@/lib/api'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { SectionPageLayout } from '@/components/layout'
-import { HupijiaoPaymentDialog } from '@/components/payment/hupijiao-payment-dialog'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
-import { getHupijiaoTopupOrderStatus, isApiSuccess } from './api'
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
-import { MySubscriptionsCard } from './components/my-subscriptions-card'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from './components/dialogs/transfer-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
-import { RedemptionCodeCard } from './components/redemption-code-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletStatsCard } from './components/wallet-stats-card'
 import { DEFAULT_DISCOUNT_RATE } from './constants'
@@ -48,26 +37,19 @@ import {
   useAffiliate,
   useRedemption,
   useCreemPayment,
-  useHupijiaoPayment,
   useWaffoPayment,
   useWaffoPancakePayment,
 } from './hooks'
 import {
   getDefaultPaymentType,
   getMinTopupAmount,
-  isHupijiaoPayment,
   isWaffoPancakePayment,
-  shouldRouteAlipayThroughHupijiao,
-  mergePresetAmounts,
-  getPresetAmountsForTopupRoute,
-  effectiveTopupPriceRatio,
 } from './lib'
 import type {
   UserWalletData,
   PaymentMethod,
   PresetAmount,
   CreemProduct,
-  HupijiaoPaymentData,
 } from './types'
 
 interface WalletProps {
@@ -86,62 +68,22 @@ export function Wallet(props: WalletProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [billingDialogOpen, setBillingDialogOpen] = useState(false)
-  const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
-  const [activeTab, setActiveTab] = useState<'subscription' | 'recharge'>('subscription')
   const [redemptionCode, setRedemptionCode] = useState('')
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
     useState<CreemProduct | null>(null)
-  const [hupijiaoDialogOpen, setHupijiaoDialogOpen] = useState(false)
-  const [hupijiaoPayment, setHupijiaoPayment] =
-    useState<HupijiaoPaymentData | null>(null)
+  const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
   const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
 
+  // Calculate effective exchange rate - when display type is USD, use rate of 1
   const effectiveUsdExchangeRate = useMemo(() => {
     return currency?.quotaDisplayType === 'USD'
       ? 1
       : currency?.usdExchangeRate || 1
   }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
-
-  const displayPaymentType = useMemo(
-    () => selectedPaymentMethod?.type ?? getDefaultPaymentType(topupInfo),
-    [selectedPaymentMethod?.type, topupInfo]
-  )
-
-  const hupijiaoPresetAmounts = useMemo(() => {
-    if (!topupInfo?.hupijiao_amount_options?.length) {
-      return []
-    }
-    return mergePresetAmounts(
-      topupInfo.hupijiao_amount_options,
-      topupInfo.hupijiao_discount || {}
-    )
-  }, [topupInfo])
-
-  const effectivePresetAmounts = useMemo(
-    () =>
-      getPresetAmountsForTopupRoute(
-        topupInfo,
-        displayPaymentType,
-        presetAmounts,
-        hupijiaoPresetAmounts
-      ),
-    [topupInfo, displayPaymentType, presetAmounts, hupijiaoPresetAmounts]
-  )
-
-  const presetPricingRatio = useMemo(
-    () =>
-      effectiveTopupPriceRatio(
-        topupInfo,
-        displayPaymentType,
-        (status?.price as number) || 1
-      ),
-    [topupInfo, displayPaymentType, status?.price]
-  )
-
   const {
     amount: paymentAmount,
     calculating,
@@ -157,12 +99,11 @@ export function Wallet(props: WalletProps) {
   } = useAffiliate()
   const { redeeming, redeemCode } = useRedemption()
   const { processing: creemProcessing, processCreemPayment } = useCreemPayment()
-  const { processing: hupijiaoProcessing, processHupijiaoPayment } =
-    useHupijiaoPayment()
   const { processWaffoPayment } = useWaffoPayment()
   const { processing: pancakeProcessing, processWaffoPancakePayment } =
     useWaffoPancakePayment()
 
+  // Fetch and refresh user data
   const fetchUser = useCallback(async () => {
     try {
       setUserLoading(true)
@@ -179,64 +120,6 @@ export function Wallet(props: WalletProps) {
   }, [])
 
   useEffect(() => {
-    if (!hupijiaoDialogOpen || !hupijiaoPayment?.trade_no) {
-      return
-    }
-
-    let stopped = false
-    let attempts = 0
-
-    const pollOrder = async () => {
-      if (stopped) return
-      attempts += 1
-
-      try {
-        const response = await getHupijiaoTopupOrderStatus(
-          hupijiaoPayment.trade_no || '',
-          hupijiaoPayment.order_id
-        )
-
-        if (isApiSuccess(response) && response.data?.paid) {
-          stopped = true
-          setHupijiaoDialogOpen(false)
-          setHupijiaoPayment(null)
-          await fetchUser()
-          toast.success(t('Payment successful'))
-        } else if (
-          isApiSuccess(response) &&
-          response.data?.status === 'expired'
-        ) {
-          stopped = true
-          setHupijiaoDialogOpen(false)
-          setHupijiaoPayment(null)
-          toast.error('订单已过期，请重新下单')
-        }
-      } catch {
-        // Ignore transient polling failures; webhook can still complete the order.
-      }
-
-      if (attempts >= 60) {
-        stopped = true
-      }
-    }
-
-    const startTimer = window.setTimeout(pollOrder, 2000)
-    const interval = window.setInterval(pollOrder, 3000)
-
-    return () => {
-      stopped = true
-      window.clearTimeout(startTimer)
-      window.clearInterval(interval)
-    }
-  }, [
-    fetchUser,
-    hupijiaoDialogOpen,
-    hupijiaoPayment?.order_id,
-    hupijiaoPayment?.trade_no,
-    t,
-  ])
-
-  useEffect(() => {
     fetchUser()
   }, [fetchUser])
 
@@ -247,92 +130,62 @@ export function Wallet(props: WalletProps) {
     }
   }, [props.initialShowHistory])
 
+  // Initialize topup amount when topup info is loaded
   useEffect(() => {
     if (topupInfo && topupAmount === 0) {
       const minTopup = getMinTopupAmount(topupInfo)
       setTopupAmount(minTopup)
 
+      // Calculate initial payment amount with default payment type
       const defaultPaymentType = getDefaultPaymentType(topupInfo)
-      calculatePaymentAmount(minTopup, defaultPaymentType, {
-        useHupijiao: shouldRouteAlipayThroughHupijiao(
-          topupInfo,
-          defaultPaymentType
-        ),
-      })
+      calculatePaymentAmount(minTopup, defaultPaymentType)
     }
   }, [topupInfo, topupAmount, calculatePaymentAmount])
 
+  // Get current payment type (selected or default)
   const getCurrentPaymentType = useCallback(() => {
     return selectedPaymentMethod?.type || getDefaultPaymentType(topupInfo)
   }, [selectedPaymentMethod, topupInfo])
 
-  const calculateRoutedPaymentAmount = useCallback(
-    (amount: number, paymentType: string) =>
-      calculatePaymentAmount(amount, paymentType, {
-        useHupijiao: shouldRouteAlipayThroughHupijiao(topupInfo, paymentType),
-      }),
-    [calculatePaymentAmount, topupInfo]
-  )
-
+  // Handle preset selection
   const handleSelectPreset = (preset: PresetAmount) => {
     setTopupAmount(preset.value)
     setSelectedPreset(preset.value)
-    calculateRoutedPaymentAmount(preset.value, getCurrentPaymentType())
+    calculatePaymentAmount(preset.value, getCurrentPaymentType())
   }
 
+  // Handle topup amount change
   const handleTopupAmountChange = (amount: number) => {
     setTopupAmount(amount)
     setSelectedPreset(null)
-    calculateRoutedPaymentAmount(amount, getCurrentPaymentType())
+    calculatePaymentAmount(amount, getCurrentPaymentType())
   }
 
+  // Handle payment method selection
   const handlePaymentMethodSelect = async (method: PaymentMethod) => {
     setSelectedPaymentMethod(method)
     setPaymentLoading(method.type)
 
     try {
+      // Validate minimum topup
       const minTopup = getMinTopupAmount(topupInfo)
       if (topupAmount < minTopup) {
         return
       }
 
-      await calculateRoutedPaymentAmount(topupAmount, method.type)
+      // Calculate payment amount and show confirmation dialog
+      await calculatePaymentAmount(topupAmount, method.type)
       setConfirmDialogOpen(true)
     } finally {
       setPaymentLoading(null)
     }
   }
 
+  // Handle payment confirmation
   const handlePaymentConfirm = async () => {
     if (!selectedPaymentMethod) return
 
     const isPancake = isWaffoPancakePayment(selectedPaymentMethod.type)
-    const isHupijiao =
-      isHupijiaoPayment(selectedPaymentMethod.type) ||
-      shouldRouteAlipayThroughHupijiao(topupInfo, selectedPaymentMethod.type)
-
-    if (isHupijiao) {
-      const payment = await processHupijiaoPayment(topupAmount)
-      if (payment) {
-        setConfirmDialogOpen(false)
-        const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-          navigator.userAgent
-        )
-        if (mobile && payment.pay_url) {
-          // Mobile: redirect directly — browser will try to open Alipay app, falls back to H5
-          window.location.href = payment.pay_url
-        } else {
-          // PC: show QR code dialog for scanning
-          setHupijiaoPayment({
-            ...payment,
-            create_time: Math.floor(Date.now() / 1000),
-          })
-          setHupijiaoDialogOpen(true)
-        }
-      }
-      return
-    }
-
     const success = isPancake
       ? await processWaffoPancakePayment(topupAmount)
       : await processPayment(topupAmount, selectedPaymentMethod.type)
@@ -343,6 +196,7 @@ export function Wallet(props: WalletProps) {
     }
   }
 
+  // Handle redemption
   const handleRedeem = async () => {
     if (!redemptionCode) return
 
@@ -353,6 +207,7 @@ export function Wallet(props: WalletProps) {
     }
   }
 
+  // Handle transfer
   const handleTransfer = async (amount: number) => {
     const success = await transferQuota(amount)
     if (success) {
@@ -361,11 +216,13 @@ export function Wallet(props: WalletProps) {
     return success
   }
 
+  // Handle Creem product selection
   const handleCreemProductSelect = (product: CreemProduct) => {
     setSelectedCreemProduct(product)
     setCreemDialogOpen(true)
   }
 
+  // Handle Creem payment confirmation
   const handleCreemConfirm = async () => {
     if (!selectedCreemProduct) return
 
@@ -388,14 +245,10 @@ export function Wallet(props: WalletProps) {
     }
   }
 
+  // Get discount rate for current topup amount
   const getDiscountRate = useCallback(() => {
-    const type =
-      selectedPaymentMethod?.type ?? getDefaultPaymentType(topupInfo)
-    const map = shouldRouteAlipayThroughHupijiao(topupInfo, type)
-      ? topupInfo?.hupijiao_discount
-      : topupInfo?.discount
-    return map?.[topupAmount] || DEFAULT_DISCOUNT_RATE
-  }, [topupInfo, topupAmount, selectedPaymentMethod?.type])
+    return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
+  }, [topupInfo, topupAmount])
 
   const handleSubscriptionAvailabilityChange = useCallback(
     (available: boolean) => {
@@ -403,13 +256,6 @@ export function Wallet(props: WalletProps) {
     },
     []
   )
-
-  // 订阅不可用时自动切到充值
-  useEffect(() => {
-    if (!showSubscriptionPanel && activeTab === 'subscription') {
-      setActiveTab('recharge')
-    }
-  }, [showSubscriptionPanel, activeTab])
 
   return (
     <>
@@ -419,100 +265,65 @@ export function Wallet(props: WalletProps) {
           {t('Manage your balance and payment methods')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-7xl flex-col gap-5'>
-            {/* Stats row */}
+          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
             <WalletStatsCard user={user} loading={userLoading} />
 
-            {/* My Subscriptions + Affiliate + Redemption — always visible at top */}
-            <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
-              <MySubscriptionsCard
-                onAvailabilityChange={handleSubscriptionAvailabilityChange}
-              />
-              <div className='flex flex-col gap-5'>
-                <AffiliateRewardsCard
-                  user={user}
-                  affiliateLink={affiliateLink}
-                  onTransfer={() => setTransferDialogOpen(true)}
-                  complianceConfirmed={
-                    topupInfo?.payment_compliance_confirmed !== false
-                  }
-                  loading={affiliateLoading}
-                />
-                <RedemptionCodeCard
+            <div
+              className={
+                showSubscriptionPanel
+                  ? 'grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] xl:items-start'
+                  : 'grid gap-4'
+              }
+            >
+              <div id='wallet-add-funds' className='scroll-mt-4'>
+                <RechargeFormCard
+                  topupInfo={topupInfo}
+                  presetAmounts={presetAmounts}
+                  selectedPreset={selectedPreset}
+                  onSelectPreset={handleSelectPreset}
+                  topupAmount={topupAmount}
+                  onTopupAmountChange={handleTopupAmountChange}
+                  paymentAmount={paymentAmount}
+                  calculating={calculating}
+                  onPaymentMethodSelect={handlePaymentMethodSelect}
+                  paymentLoading={paymentLoading}
                   redemptionCode={redemptionCode}
                   onRedemptionCodeChange={setRedemptionCode}
                   onRedeem={handleRedeem}
                   redeeming={redeeming}
                   topupLink={topupInfo?.topup_link}
+                  loading={topupLoading}
+                  priceRatio={(status?.price as number) || 1}
+                  usdExchangeRate={effectiveUsdExchangeRate}
+                  onOpenBilling={() => setBillingDialogOpen(true)}
+                  creemProducts={topupInfo?.creem_products}
+                  enableCreemTopup={topupInfo?.enable_creem_topup}
+                  onCreemProductSelect={handleCreemProductSelect}
+                  enableWaffoTopup={topupInfo?.enable_waffo_topup}
+                  waffoPayMethods={topupInfo?.waffo_pay_methods}
+                  waffoMinTopup={topupInfo?.waffo_min_topup}
+                  onWaffoMethodSelect={handleWaffoMethodSelect}
+                  enableWaffoPancakeTopup={
+                    topupInfo?.enable_waffo_pancake_topup
+                  }
                 />
               </div>
+
+              <SubscriptionPlansCard
+                topupInfo={topupInfo}
+                onAvailabilityChange={handleSubscriptionAvailabilityChange}
+              />
             </div>
 
-            {/* Tab: Subscription Plans / Recharge */}
-            <Tabs
-              value={activeTab}
-              onValueChange={(v) =>
-                setActiveTab((v as 'subscription' | 'recharge') || 'subscription')
+            <AffiliateRewardsCard
+              user={user}
+              affiliateLink={affiliateLink}
+              onTransfer={() => setTransferDialogOpen(true)}
+              complianceConfirmed={
+                topupInfo?.payment_compliance_confirmed !== false
               }
-            >
-              {showSubscriptionPanel && (
-                <TabsList className='h-10 w-full max-w-xs'>
-                  <TabsTrigger value='subscription'>
-                    {t('Subscription')}
-                  </TabsTrigger>
-                  <TabsTrigger value='recharge'>{t('Recharge')}</TabsTrigger>
-                </TabsList>
-              )}
-
-              <TabsContent value='subscription' className='mt-4' keepMounted>
-                <SubscriptionPlansCard
-                  topupInfo={topupInfo}
-                  onAvailabilityChange={handleSubscriptionAvailabilityChange}
-                />
-              </TabsContent>
-
-              <TabsContent value='recharge' className='mt-4'>
-                <div id='wallet-add-funds' className='scroll-mt-4'>
-                  <RechargeFormCard
-                    topupInfo={topupInfo}
-                    presetAmounts={effectivePresetAmounts}
-                    selectedPreset={selectedPreset}
-                    onSelectPreset={handleSelectPreset}
-                    topupAmount={topupAmount}
-                    onTopupAmountChange={handleTopupAmountChange}
-                    paymentAmount={paymentAmount}
-                    calculating={calculating}
-                    onPaymentMethodSelect={handlePaymentMethodSelect}
-                    paymentLoading={paymentLoading}
-                    loading={topupLoading}
-                    priceRatio={presetPricingRatio}
-                    usdExchangeRate={
-                      shouldRouteAlipayThroughHupijiao(
-                        topupInfo,
-                        displayPaymentType
-                      )
-                        ? 1
-                        : effectiveUsdExchangeRate
-                    }
-                    onOpenBilling={() => setBillingDialogOpen(true)}
-                    creemProducts={topupInfo?.creem_products}
-                    enableCreemTopup={topupInfo?.enable_creem_topup}
-                    onCreemProductSelect={handleCreemProductSelect}
-                    enableWaffoTopup={topupInfo?.enable_waffo_topup}
-                    waffoPayMethods={topupInfo?.waffo_pay_methods}
-                    waffoMinTopup={topupInfo?.waffo_min_topup}
-                    onWaffoMethodSelect={handleWaffoMethodSelect}
-                    enableWaffoPancakeTopup={
-                      topupInfo?.enable_waffo_pancake_topup
-                    }
-                    alipayHupijiaoUsdQuotaCopy={shouldRouteAlipayThroughHupijiao(
-                      topupInfo,
-                      displayPaymentType
-                    )}
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
+              loading={affiliateLoading}
+            />
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
@@ -525,7 +336,7 @@ export function Wallet(props: WalletProps) {
         paymentAmount={paymentAmount}
         paymentMethod={selectedPaymentMethod}
         calculating={calculating}
-        processing={processing || pancakeProcessing || hupijiaoProcessing}
+        processing={processing || pancakeProcessing}
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />
@@ -549,18 +360,6 @@ export function Wallet(props: WalletProps) {
         onConfirm={handleCreemConfirm}
         product={selectedCreemProduct}
         processing={creemProcessing}
-      />
-
-      <HupijiaoPaymentDialog
-        open={hupijiaoDialogOpen}
-        onOpenChange={setHupijiaoDialogOpen}
-        payment={hupijiaoPayment}
-        amount={paymentAmount}
-        onExpired={() => {
-          setHupijiaoDialogOpen(false)
-          setHupijiaoPayment(null)
-          toast.error('订单已过期，请重新下单')
-        }}
       />
     </>
   )

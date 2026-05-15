@@ -21,7 +21,6 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import {
   calculateAmount,
-  calculateHupijiaoAmount,
   calculateStripeAmount,
   calculateWaffoPancakeAmount,
   requestPayment,
@@ -30,7 +29,6 @@ import {
 } from '../api'
 import {
   isStripePayment,
-  isHupijiaoPayment,
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
@@ -46,25 +44,17 @@ export function usePayment() {
 
   // Calculate payment amount
   const calculatePaymentAmount = useCallback(
-    async (
-      topupAmount: number,
-      paymentType: string,
-      options?: { useHupijiao?: boolean }
-    ) => {
+    async (topupAmount: number, paymentType: string) => {
       try {
         setCalculating(true)
 
         const isStripe = isStripePayment(paymentType)
         const isPancake = isWaffoPancakePayment(paymentType)
-        const isHupijiao =
-          options?.useHupijiao || isHupijiaoPayment(paymentType)
         const response = isStripe
           ? await calculateStripeAmount({ amount: topupAmount })
           : isPancake
             ? await calculateWaffoPancakeAmount({ amount: topupAmount })
-            : isHupijiao
-              ? await calculateHupijiaoAmount({ amount: topupAmount })
-              : await calculateAmount({ amount: topupAmount })
+            : await calculateAmount({ amount: topupAmount })
 
         if (isApiSuccess(response) && response.data) {
           const calculatedAmount = parseFloat(response.data)
@@ -92,12 +82,7 @@ export function usePayment() {
         setProcessing(true)
 
         const isStripe = isStripePayment(paymentType)
-        const isHupijiao = isHupijiaoPayment(paymentType)
         const amount = Math.floor(topupAmount)
-
-        if (isHupijiao) {
-          return false
-        }
 
         const response = isStripe
           ? await requestStripePayment({

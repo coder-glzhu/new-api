@@ -87,25 +87,6 @@ export function isWaffoPancakePayment(paymentType: string): boolean {
 }
 
 /**
- * Check if payment method is Hupijiao/Alipay
- */
-export function isHupijiaoPayment(paymentType: string): boolean {
-  return paymentType === PAYMENT_TYPES.HUPIJIAO
-}
-
-/**
- * Check if the visible Alipay method should be routed through Hupijiao.
- */
-export function shouldRouteAlipayThroughHupijiao(
-  topupInfo: TopupInfo | null,
-  paymentType: string
-): boolean {
-  return (
-    !!topupInfo?.enable_hupijiao_topup && paymentType === PAYMENT_TYPES.ALIPAY
-  )
-}
-
-/**
  * Get default payment type from topup info
  */
 export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
@@ -157,22 +138,6 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
     return topupInfo.waffo_pancake_min_topup || DEFAULT_MIN_TOPUP
   }
 
-  if (topupInfo.enable_hupijiao_topup) {
-    const alipayMethod = topupInfo.pay_methods?.find(
-      (method) => method.type === PAYMENT_TYPES.ALIPAY
-    )
-    // min_topup / hupijiao_min_recharge_amount 为「充值数量」下限；hupijiao_min_topup 为最低实付人民币，勿混用
-    const fromMethod = alipayMethod?.min_topup
-    if (typeof fromMethod === 'number' && fromMethod > 0) {
-      return fromMethod
-    }
-    const fromApi = topupInfo.hupijiao_min_recharge_amount
-    if (typeof fromApi === 'number' && fromApi > 0) {
-      return fromApi
-    }
-    return DEFAULT_MIN_TOPUP
-  }
-
   return DEFAULT_MIN_TOPUP
 }
 
@@ -200,41 +165,4 @@ export function mergePresetAmounts(
     value: amount,
     discount: discounts[amount] || 1.0,
   }))
-}
-
-/**
- * Preset buttons for the active top-up route: Hupijiao Alipay uses dedicated
- * presets when configured; otherwise same rules as the global list.
- */
-export function getPresetAmountsForTopupRoute(
-  topupInfo: TopupInfo | null,
-  paymentType: string,
-  globalPresets: PresetAmount[],
-  hupijiaoPresets: PresetAmount[]
-): PresetAmount[] {
-  if (shouldRouteAlipayThroughHupijiao(topupInfo, paymentType)) {
-    if (hupijiaoPresets.length > 0) {
-      return hupijiaoPresets
-    }
-    const min = getMinTopupAmount(topupInfo)
-    return generatePresetAmounts(min)
-  }
-  if (globalPresets.length > 0) {
-    return globalPresets
-  }
-  const min = getMinTopupAmount(topupInfo)
-  return generatePresetAmounts(min)
-}
-
-/** Price multiplier shown in preset / estimate UI for the selected route. */
-export function effectiveTopupPriceRatio(
-  topupInfo: TopupInfo | null,
-  paymentType: string,
-  globalRatio: number
-): number {
-  if (shouldRouteAlipayThroughHupijiao(topupInfo, paymentType)) {
-    const r = topupInfo?.hupijiao_price
-    return typeof r === 'number' && Number.isFinite(r) && r > 0 ? r : 0
-  }
-  return globalRatio
 }

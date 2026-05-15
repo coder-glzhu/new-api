@@ -41,17 +41,9 @@ export const STATUS_CONFIG: Record<TopupStatus, StatusConfig> = {
     variant: 'warning',
     label: 'Pending',
   },
-  failed: {
-    variant: 'danger',
-    label: 'Failed',
-  },
   expired: {
     variant: 'danger',
     label: 'Expired',
-  },
-  canceled: {
-    variant: 'neutral',
-    label: 'Cancelled',
   },
 }
 
@@ -68,10 +60,8 @@ export function getStatusConfig(status: TopupStatus): StatusConfig {
 export const PAYMENT_METHOD_NAMES: Record<string, string> = {
   stripe: 'Stripe',
   alipay: 'Alipay',
-  hupijiao: 'Alipay',
   wxpay: 'WeChat Pay',
   waffo: 'Waffo',
-  waffo_pancake: 'Waffo Pancake',
 }
 
 /**
@@ -79,19 +69,8 @@ export const PAYMENT_METHOD_NAMES: Record<string, string> = {
  */
 export function getPaymentMethodName(
   method: string,
-  tOrProvider?: ((key: string) => string) | string
+  t?: (key: string) => string
 ): string {
-  if (typeof tOrProvider === 'string') {
-    // Legacy: called with provider string (e.g. 'hupijiao')
-    const provider = tOrProvider
-    if (provider === 'hupijiao' || method === 'hupijiao') return 'Alipay'
-    return PAYMENT_METHOD_NAMES[method] || method
-  }
-  const t = tOrProvider
-  if (method === 'hupijiao') {
-    const name = 'Alipay'
-    return t ? t(name) : name
-  }
   const name = PAYMENT_METHOD_NAMES[method] || method
   return t ? t(name) : name
 }

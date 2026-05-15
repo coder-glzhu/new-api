@@ -114,7 +114,7 @@ export function useSidebarData(): SidebarData {
         items: [
           {
             title: t('Wallet'),
-            url: '/wallet',
+            url: '/my-wallet',
             icon: Wallet,
           },
           {

@@ -34,8 +34,6 @@ import type {
   CompleteOrderRequest,
   CreemPaymentRequest,
   CreemPaymentResponse,
-  HupijiaoPaymentResponse,
-  HupijiaoOrderStatusResponse,
   WaffoPaymentRequest,
   WaffoPaymentResponse,
   WaffoPancakePaymentRequest,
@@ -96,25 +94,6 @@ export async function calculateStripeAmount(
 }
 
 /**
- * Calculate payment amount for Hupijiao/Alipay payment
- */
-export async function calculateHupijiaoAmount(
-  request: AmountRequest
-): Promise<AmountResponse> {
-  const res = await api.post('/api/user/hupijiao/amount', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
-  const data = res.data?.data
-  return {
-    ...res.data,
-    data:
-      data && typeof data === 'object' && 'amount' in data
-        ? String((data as { amount?: number | string }).amount ?? '')
-        : res.data?.data,
-  }
-}
-
-/**
  * Request regular payment
  */
 export async function requestPayment(
@@ -127,59 +106,6 @@ export async function requestPayment(
     ...res.data,
     url: res.data.url || (res as unknown as { url?: string }).url,
   }
-}
-
-/**
- * Request Hupijiao/Alipay payment
- */
-export async function requestHupijiaoPayment(
-  request: AmountRequest
-): Promise<HupijiaoPaymentResponse> {
-  const res = await api.post('/api/user/hupijiao/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
-  return res.data
-}
-
-/**
- * Check Hupijiao/Alipay topup order status and settle it when paid.
- */
-export async function getHupijiaoTopupOrderStatus(
-  tradeNo: string,
-  openid?: string
-): Promise<HupijiaoOrderStatusResponse> {
-  const res = await api.get(
-    `/api/user/topup/${encodeURIComponent(tradeNo)}/status`,
-    {
-      params: openid ? { openid } : undefined,
-      skipBusinessError: true,
-    } as Record<string, unknown>
-  )
-  return res.data
-}
-
-/**
- * Reopen payment for a pending Hupijiao/Alipay order.
- */
-export async function repayHupijiaoTopupOrder(
-  tradeNo: string
-): Promise<HupijiaoPaymentResponse> {
-  const res = await api.post(
-    `/api/user/topup/${encodeURIComponent(tradeNo)}/repay`,
-    {},
-    {
-      skipBusinessError: true,
-    } as Record<string, unknown>
-  )
-  return res.data
-}
-
-/**
- * Cancel a pending topup/subscription payment order.
- */
-export async function cancelTopupOrder(tradeNo: string): Promise<ApiResponse> {
-  const res = await api.delete(`/api/user/topup/${encodeURIComponent(tradeNo)}`)
-  return res.data
 }
 
 /**
