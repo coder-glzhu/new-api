@@ -230,7 +230,7 @@ export function RechargeTab({
                   ) : (
                     getPaymentIcon('alipay', 'h-4 w-4')
                   )}
-                  <span>{t('Pay with Alipay')}</span>
+                  <span>{t('Alipay')}</span>
                 </Button>
               </div>
             </>
