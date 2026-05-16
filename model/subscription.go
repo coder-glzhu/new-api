@@ -313,6 +313,7 @@ func (s *UserSubscription) BeforeUpdate(tx *gorm.DB) error {
 
 type SubscriptionSummary struct {
 	Subscription *UserSubscription `json:"subscription"`
+	PlanTitle    string            `json:"plan_title,omitempty"`
 }
 
 func calcPlanEndTime(start time.Time, plan *SubscriptionPlan) (int64, error) {
@@ -790,11 +791,30 @@ func buildSubscriptionSummaries(subs []UserSubscription) []SubscriptionSummary {
 	if len(subs) == 0 {
 		return []SubscriptionSummary{}
 	}
+	planIds := make([]int, 0, len(subs))
+	seen := make(map[int]struct{}, len(subs))
+	for _, sub := range subs {
+		if _, ok := seen[sub.PlanId]; ok {
+			continue
+		}
+		seen[sub.PlanId] = struct{}{}
+		planIds = append(planIds, sub.PlanId)
+	}
+	titleMap := make(map[int]string, len(planIds))
+	if len(planIds) > 0 {
+		var plans []SubscriptionPlan
+		if err := DB.Select("id, title").Where("id IN ?", planIds).Find(&plans).Error; err == nil {
+			for _, plan := range plans {
+				titleMap[plan.Id] = plan.Title
+			}
+		}
+	}
 	result := make([]SubscriptionSummary, 0, len(subs))
 	for _, sub := range subs {
 		subCopy := sub
 		result = append(result, SubscriptionSummary{
 			Subscription: &subCopy,
+			PlanTitle:    titleMap[sub.PlanId],
 		})
 	}
 	return result

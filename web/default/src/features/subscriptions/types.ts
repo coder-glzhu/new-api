@@ -75,6 +75,7 @@ export type UserSubscription = z.infer<typeof userSubscriptionSchema>
 
 export interface UserSubscriptionRecord {
   subscription: UserSubscription
+  plan_title?: string
 }
 
 // ============================================================================

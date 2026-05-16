@@ -54,24 +54,31 @@ export function MyWallet({ initialShowHistory }: MyWalletProps) {
               onValueChange={(value) =>
                 wallet.setActiveTab(
                   (value as 'recharge' | 'subscription' | 'affiliate') ||
-                    'recharge'
+                    'subscription'
                 )
               }
               className='gap-4'
             >
               <div className='overflow-x-auto pb-1'>
                 <TabsList className='h-10 min-w-max'>
-                  <TabsTrigger value='recharge' className='px-4'>
-                    {t('Recharge')}
-                  </TabsTrigger>
                   <TabsTrigger value='subscription' className='px-4'>
                     {t('Subscription')}
+                  </TabsTrigger>
+                  <TabsTrigger value='recharge' className='px-4'>
+                    {t('Recharge')}
                   </TabsTrigger>
                   <TabsTrigger value='affiliate' className='px-4'>
                     {t('Referral Program')}
                   </TabsTrigger>
                 </TabsList>
               </div>
+
+              <TabsContent value='subscription' className='mt-0'>
+                <SubscriptionTab
+                  topupInfo={wallet.topupInfo}
+                  onPurchaseComplete={wallet.refreshUser}
+                />
+              </TabsContent>
 
               <TabsContent value='recharge' className='mt-0'>
                 <RechargeTab
@@ -94,13 +101,6 @@ export function MyWallet({ initialShowHistory }: MyWalletProps) {
                   redemptionEnabled={wallet.redemptionEnabled}
                   loading={wallet.topupLoading}
                   onOpenBilling={() => wallet.setBillingDialogOpen(true)}
-                />
-              </TabsContent>
-
-              <TabsContent value='subscription' className='mt-0'>
-                <SubscriptionTab
-                  topupInfo={wallet.topupInfo}
-                  onPurchaseComplete={wallet.refreshUser}
                 />
               </TabsContent>
 

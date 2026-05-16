@@ -67,7 +67,7 @@ function getHupijiaoPresets(
 
 export function useMyWallet(initialShowHistory?: boolean) {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<WalletTab>('recharge')
+  const [activeTab, setActiveTab] = useState<WalletTab>('subscription')
   const [user, setUser] = useState<UserWalletData | null>(null)
   const [userLoading, setUserLoading] = useState(true)
   const [topupAmount, setTopupAmount] = useState(0)

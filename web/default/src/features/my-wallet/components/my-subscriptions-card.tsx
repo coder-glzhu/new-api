@@ -151,12 +151,9 @@ function SubscriptionRow({
 
         <div className='min-w-0 flex-1 px-3 py-2.5 sm:px-3.5 sm:py-3'>
           <div className='flex flex-wrap items-center justify-between gap-2'>
-            <div className='flex min-w-0 items-center gap-2'>
+            <div className='min-w-0 flex-1'>
               <span className='truncate text-sm font-semibold'>
                 {planTitle || t('Subscription')}
-              </span>
-              <span className='text-muted-foreground/70 text-xs tabular-nums'>
-                #{id}
               </span>
             </div>
             {isActive ? (
@@ -509,7 +506,9 @@ export function MySubscriptionsCard({
                   key={record.subscription.id}
                   record={record}
                   planTitle={
-                    planTitleMap.get(record.subscription.plan_id) || ''
+                    record.plan_title ||
+                    planTitleMap.get(record.subscription.plan_id) ||
+                    ''
                   }
                   draggable={draggable}
                   nowSec={nowSec}
@@ -521,7 +520,11 @@ export function MySubscriptionsCard({
             <SubscriptionRow
               key={record.subscription.id}
               record={record}
-              planTitle={planTitleMap.get(record.subscription.plan_id) || ''}
+              planTitle={
+                record.plan_title ||
+                planTitleMap.get(record.subscription.plan_id) ||
+                ''
+              }
               draggable={false}
               nowSec={nowSec}
             />

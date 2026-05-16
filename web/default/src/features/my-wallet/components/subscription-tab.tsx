@@ -19,12 +19,12 @@ export function SubscriptionTab({
   }, [onPurchaseComplete])
 
   return (
-    <div className='grid gap-4 xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.15fr)] xl:items-start'>
-      <MySubscriptionsCard refreshSignal={refreshSignal} />
+    <div className='grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:items-start'>
       <AvailablePlansCard
         topupInfo={topupInfo}
         onPurchaseComplete={triggerRefresh}
       />
+      <MySubscriptionsCard refreshSignal={refreshSignal} />
     </div>
   )
 }
